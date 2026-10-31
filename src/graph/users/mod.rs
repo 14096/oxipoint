@@ -1,6 +1,10 @@
+mod models;
+
+pub use models::User;
+
 use std::sync::Arc;
 
-use super::{DriveRequest, User, get_json, pager};
+use crate::graph::*;
 use crate::{
     Result,
     http::{Pager, QueryOptions, Transport, query::query_methods},

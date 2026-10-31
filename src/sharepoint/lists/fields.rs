@@ -1,12 +1,12 @@
 use serde::Serialize;
 
-use super::name_literal;
+use crate::sharepoint::inner::name_literal;
 use crate::{
     Result,
     http::Body,
     sharepoint::{
         Field,
-        web::{json_body, post},
+        inner::{json_body, post},
     },
 };
 

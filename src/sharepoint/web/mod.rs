@@ -2,58 +2,31 @@
 
 use std::sync::Arc;
 
-use reqwest::Method;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use url::Url;
 
-use super::{FolderInfo, Inner, NewWeb, RegionalSettings, SiteInfo, SpUser, Web, odata_str};
+use super::{
+    ContentTypesRequest, FieldsRequest, FolderInfo, Inner, PagesRequest, PermissionsRequest,
+    RoleDefinitionsRequest, SiteGroupsRequest, SpUser, UsersRequest,
+    inner::{get_req, json_body, post},
+};
 use crate::{
     Result,
-    http::{Body, Pager, QueryOptions, RawRequest, encode_path, query::query_methods},
+    http::{Body, Pager, QueryOptions, encode_path, query::query_methods},
 };
 
-mod admin;
+mod features;
+mod models;
 mod navigation;
-mod principals;
-mod schema;
+mod recycle_bin;
 
-pub use admin::{FeaturesRequest, RecycleBinItemRequest, RecycleBinRequest};
-pub use navigation::{NavigationNodeRequest, NavigationNodesRequest, NavigationRequest};
-pub use principals::{
-    PermissionsRequest, RoleDefinitionsRequest, SiteGroupRequest, SiteGroupsRequest, UserRequest,
-    UsersRequest,
+pub use features::FeaturesRequest;
+pub use models::{
+    Feature, NavigationNode, NewWeb, RecycleBinItem, RegionalSettings, SiteInfo, TimeZone, Web,
 };
-pub use schema::{ContentTypeRequest, ContentTypesRequest, FieldRequest, FieldsRequest};
-
-pub(crate) fn get_req(path: &str, q: &QueryOptions) -> RawRequest {
-    let mut r = RawRequest::new(Method::GET, path);
-    r.query = q.pairs().to_vec();
-    r
-}
-
-pub(crate) fn json_body<F: Serialize>(f: &F) -> Result<Body> {
-    Ok(Body::Json(serde_json::to_value(f)?))
-}
-
-/// POSTs with the form digest and deserializes the created entity.
-pub(crate) async fn post<T: DeserializeOwned>(
-    inner: &Inner,
-    path: String,
-    body: Body,
-) -> Result<T> {
-    let mut req = RawRequest::new(Method::POST, path);
-    req.body = body;
-    inner.write(req).await?.json()
-}
-
-/// POSTs with the form digest and discards the result.
-pub(crate) async fn post_action(inner: &Inner, path: String, body: Body) -> Result<()> {
-    let mut req = RawRequest::new(Method::POST, path);
-    req.body = body;
-    inner.write(req).await?;
-    Ok(())
-}
+pub use navigation::{NavigationNodeRequest, NavigationNodesRequest, NavigationRequest};
+pub use recycle_bin::{RecycleBinItemRequest, RecycleBinRequest};
 
 /// `/web` — the site itself, or a subweb.
 #[derive(Debug, Clone)]
@@ -203,6 +176,11 @@ impl WebRequest {
         ContentTypesRequest::new(self.inner.clone(), format!("{}/contenttypes", self.base))
     }
 
+    /// The modern pages of the web.
+    pub fn pages(&self) -> PagesRequest {
+        PagesRequest::new(self.inner.clone(), "/sitepages/pages".to_owned())
+    }
+
     /// Users of the site collection.
     pub fn users(&self) -> UsersRequest {
         UsersRequest::new(self.inner.clone(), format!("{}/siteusers", self.base))
@@ -234,10 +212,6 @@ impl WebRequest {
     }
 }
 query_methods!(WebRequest);
-
-pub(crate) fn id_literal(id: &str) -> String {
-    format!("'{}'", odata_str(id))
-}
 
 #[cfg(test)]
 mod tests {

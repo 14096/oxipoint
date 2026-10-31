@@ -1,10 +1,10 @@
 use serde_json::json;
 
-use super::name_literal;
+use crate::sharepoint::inner::name_literal;
 use crate::{
     Result,
     http::Body,
-    sharepoint::{ContentType, web::post},
+    sharepoint::{ContentType, inner::post},
 };
 
 collection!(

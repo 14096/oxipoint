@@ -1,20 +1,24 @@
+mod attachments;
+mod comments;
+
+pub use attachments::{AttachmentRequest, AttachmentsRequest};
+pub use comments::CommentsRequest;
+
 use std::sync::Arc;
 
-use bytes::Bytes;
 use reqwest::Method;
 use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
-use super::name_literal;
 use crate::{
     Error, Result,
     fields::Fields,
     http::{Body, Pager, QueryOptions, RawRequest, query::query_methods},
     sharepoint::{
-        Attachment, Comment, ContentType, FieldResult, FileInfo, FolderInfo, Inner, ItemVersion,
-        ListInfo, ListItem, PermissionsRequest, SpUser, ValidateOptions,
-        web::{get_req, json_body, post, post_action},
+        ContentType, FieldResult, FileInfo, FolderInfo, Inner, ItemVersion, ListInfo, ListItem,
+        PermissionsRequest, SpUser, ValidateOptions,
+        inner::{get_req, json_body, post, post_action},
     },
 };
 
@@ -318,75 +322,6 @@ impl ItemRequest {
     }
 }
 query_methods!(ItemRequest);
-
-collection!(
-    /// The comments of an item.
-    CommentsRequest => Comment
-);
-
-impl CommentsRequest {
-    /// Adds a comment and returns it.
-    pub async fn add(&self, text: &str) -> Result<Comment> {
-        post(
-            &self.inner,
-            self.base.clone(),
-            Body::Json(json!({ "text": text })),
-        )
-        .await
-    }
-
-    /// Deletes a comment by id.
-    pub async fn delete(&self, id: &str) -> Result<()> {
-        self.inner
-            .tunnel(
-                "DELETE",
-                format!("{}({})", self.base, crate::http::encode_path(id)),
-                Body::None,
-            )
-            .await?;
-        Ok(())
-    }
-}
-
-collection!(
-    /// The attachments of an item.
-    AttachmentsRequest => Attachment
-);
-
-impl AttachmentsRequest {
-    /// Attaches a file.
-    pub async fn add(&self, file_name: &str, content: impl Into<Bytes>) -> Result<Attachment> {
-        let mut req = RawRequest::new(
-            Method::POST,
-            format!("{}/add(FileName={})", self.base, name_literal(file_name)),
-        );
-        req.body = Body::Bytes(content.into());
-        self.inner.write(req).await?.json()
-    }
-
-    /// An attachment by file name.
-    pub fn by_name(&self, file_name: &str) -> AttachmentRequest {
-        AttachmentRequest::new(
-            self.inner.clone(),
-            format!("{}({})", self.base, name_literal(file_name)),
-        )
-    }
-}
-
-entity!(
-    /// One attachment.
-    AttachmentRequest => Attachment
-);
-
-impl AttachmentRequest {
-    /// Deletes the attachment.
-    pub async fn delete(&self) -> Result<()> {
-        self.inner
-            .tunnel("DELETE", self.base.clone(), Body::None)
-            .await?;
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 mod tests {

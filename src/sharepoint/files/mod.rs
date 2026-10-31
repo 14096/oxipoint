@@ -1,10 +1,14 @@
+mod models;
+
+pub use models::{FileInfo, FolderInfo};
+
 use std::sync::Arc;
 
 use bytes::Bytes;
 use reqwest::Method;
 use serde_json::json;
 
-use super::{FileInfo, FolderInfo, Inner, odata_str};
+use super::{Inner, odata_str};
 use crate::{
     Result,
     http::{Body, Pager, QueryOptions, RawRequest, query::query_methods},

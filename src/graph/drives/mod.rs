@@ -1,3 +1,7 @@
+mod models;
+
+pub use models::{Drive, DriveItem};
+
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -5,7 +9,7 @@ use reqwest::{Method, header::CONTENT_TYPE};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{Drive, DriveItem, get_json, pager};
+use crate::graph::*;
 use crate::{
     Result,
     http::{Body, QueryOptions, RawRequest, Transport, encode_path, query::query_methods},

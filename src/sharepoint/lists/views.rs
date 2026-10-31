@@ -1,13 +1,13 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use super::name_literal;
+use crate::sharepoint::inner::name_literal;
 use crate::{
     Result,
     http::Body,
     sharepoint::{
         View,
-        web::{get_req, json_body, post},
+        inner::{get_req, json_body, post},
     },
 };
 

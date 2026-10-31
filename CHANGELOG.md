@@ -6,6 +6,21 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.1-beta3] - 2026-10-31
+
+### Added
+
+- **Graph site pages**: `site.pages()` lists, reads (with `canvasLayout`), creates, updates,
+  publishes and deletes modern pages, and lists a page's web parts.
+- **SharePoint site pages**: `web().pages()` lists, reads (with `CanvasContent1`), creates,
+  updates, publishes and deletes modern pages through `_api/sitepages`.
+
+### Changed
+
+- The Graph and SharePoint clients' internal modules now follow their resource hierarchies
+  (Graph: `sites`, `lists`, `drives`, `users`; SharePoint: `web`, `fields`, `content_types`,
+  `principals`, `lists`, `files`, `changes`, `pages`). Public paths are unchanged.
+
 ## [0.0.1-beta2] - 2026-10-31
 
 ### Added

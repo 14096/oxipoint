@@ -5,7 +5,8 @@ A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
 - Four sign-in methods: username/password, certificate, interactive browser, device code.
 - Typed, chainable APIs for the main entities: sites and webs (navigation, users, groups,
   permissions, features, recycle bin), lists (fields, views, content types, webhooks), items
-  (typed column values, validated writes, likes, comments, delta and change tracking), files and users.
+  (typed column values, validated writes, likes, comments, delta and change tracking), modern
+  pages (Graph and SharePoint REST), files and users.
 - Typed column values (`rsp::fields`) that serialize for either SharePoint or Graph.
 - A generic request builder for everything else, with the same authentication, retry and error handling.
 - Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
@@ -179,7 +180,7 @@ impl TokenCredential for MyCredential {
 sends them. Collections follow `@odata.nextLink` automatically.
 
 ```rust
-use rsp::graph::GraphClient;
+use rsp::graph::{GraphClient, NewSitePage, NewSubscription};
 use serde_json::json;
 
 let graph = GraphClient::new(cred);
@@ -215,6 +216,16 @@ let changes = tasks.items().delta(None).await?;                   // first sync
 let newer = tasks.items().delta(changes.next_token.as_deref()).await?; // resume
 let versions = tasks.item("1").versions().await?;
 tasks.subscriptions().create(&NewSubscription::new("https://example.com/hook", "2030-01-01T00:00:00Z")).await?;
+
+// Modern pages: list, read with canvas, create, update, publish, delete
+let pages = site.pages();
+let all = pages.list().await?;
+let home = pages.by_id(&all[0].id).expand("canvasLayout").get().await?;
+let page = pages.create(&NewSitePage::new("News.aspx").title("News")).await?;
+pages.by_id(&page.id).update(&json!({ "title": "Latest news" })).await?;
+pages.by_id(&page.id).publish().await?;
+let parts = pages.by_id(&page.id).web_parts().list().await?;
+pages.by_id(&page.id).delete().await?;
 
 // Files (document libraries and OneDrive)
 let drive = site.drive();                     // or graph.me().drive(), graph.drive("<id>")
@@ -305,7 +316,8 @@ and cached for you.
 
 ```rust
 use rsp::sharepoint::{
-    ChangeQuery, ListTemplate, NewList, NewSubscription, NewWeb, PermissionKind, SharePointClient,
+    ChangeQuery, ListTemplate, NewList, NewSitePage, NewSubscription, NewWeb, PermissionKind,
+    SharePointClient,
 };
 use serde_json::json;
 
@@ -331,6 +343,15 @@ let groups = sp.web().groups().by_id(5).users().list().await?;
 sp.web().features().activate("<feature-guid>").await?;
 let settings = sp.web().expand("TimeZone").regional_settings().await?;
 let bin = sp.web().recycle_bin().list().await?;
+
+// Modern pages: list, read with canvas content, create, update, publish, delete
+let pages = sp.web().pages();
+let all = pages.list().await?;
+let home = pages.by_id(all[0].id).select(["Id", "Title", "CanvasContent1"]).get().await?;
+let news = pages.create(&NewSitePage::new("News.aspx").title("News")).await?;
+pages.by_id(news.id).update(&json!({ "Title": "Latest news" })).await?;
+pages.by_id(news.id).publish().await?;
+pages.by_id(news.id).delete().await?;
 
 // Create, update and delete lists
 let books = sp.lists().create(&NewList::new("Books", ListTemplate::GenericList).description("Reading list")).await?;
@@ -382,6 +403,7 @@ Tips:
 | Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete) |
 | Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                            | create, update, delete, columns, content types, subscriptions (no views or permissions)              |
 | Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments          | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter     |
+| Modern pages      | list, read (canvas content), create, update, publish, delete                                                    | list, read (canvas layout), create, update, publish, delete, web parts                               |
 | Files and folders | read, upload, download, folders                                                                                 | drives, upload (resumable), download                                                                 |
 | Users             | current user, site users, groups, ensure user                                                                   | me, users                                                                                            |
 

@@ -1,14 +1,24 @@
+mod columns;
+mod content_types;
+mod items;
+mod models;
+mod subscriptions;
+
+pub use columns::{ListColumnRequest, ListColumnsRequest};
+pub use content_types::{ListContentTypeRequest, ListContentTypesRequest};
+pub use items::{ListItemRequest, ListItemsRequest};
+pub use models::{
+    DeltaPage, ItemActivity, ItemAnalytics, ItemVersion, List, ListFacet, ListItem,
+    NewSubscription, Subscription,
+};
+pub use subscriptions::ListSubscriptionsRequest;
+
 use std::sync::Arc;
 
 use reqwest::Method;
 use serde::Serialize;
-use serde_json::{Map, Value, json};
-use url::Url;
 
-use super::{
-    Column, ContentType, DeltaPage, DriveItemRequest, ItemActivity, ItemAnalytics, ItemVersion,
-    List, ListItem, NewSubscription, Subscription, get_json, pager, request_with,
-};
+use crate::graph::*;
 use crate::{
     Result,
     http::{Body, Pager, QueryOptions, RawRequest, Transport, encode_path, query::query_methods},
@@ -128,278 +138,6 @@ impl ListRequest {
     }
 }
 query_methods!(ListRequest);
-
-/// A list's items collection.
-#[derive(Debug, Clone)]
-pub struct ListItemsRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-    unindexed: bool,
-}
-
-impl ListItemsRequest {
-    fn request(&self, path: &str) -> RawRequest {
-        let mut req = request_with(path, &self.query);
-        if self.unindexed {
-            req.headers.push((
-                "Prefer".into(),
-                "HonorNonIndexedQueriesWarningMayFailRandomly".into(),
-            ));
-        }
-        req
-    }
-
-    /// Filters on a column that is not indexed, which Graph only allows with an opt-in header.
-    ///
-    /// Sets `$filter` and sends `Prefer: HonorNonIndexedQueriesWarningMayFailRandomly`.
-    /// On large lists such queries can fail.
-    pub fn filter_unindexed(mut self, expr: impl Into<String>) -> Self {
-        self.query = self.query.filter(expr);
-        self.unindexed = true;
-        self
-    }
-
-    /// Lists items, following paging links. Use `.expand("fields")` to include column values.
-    pub async fn list(&self) -> Result<Vec<ListItem>> {
-        self.pages().collect_all().await
-    }
-
-    /// Returns a pager.
-    pub fn pages(&self) -> Pager<ListItem> {
-        Pager::new(self.t.clone(), self.request(&self.base))
-    }
-
-    /// Creates an item from a serializable set of column values.
-    pub async fn create<F: Serialize>(&self, fields: &F) -> Result<ListItem> {
-        let mut req = RawRequest::new(Method::POST, self.base.as_str());
-        req.body = Body::Json(json!({ "fields": serde_json::to_value(fields)? }));
-        self.t.send(&req).await?.json()
-    }
-
-    /// Reads the items changed since `token` (everything when `None`), following paging links.
-    ///
-    /// The returned [`DeltaPage::next_token`] resumes the query on the next call.
-    pub async fn delta(&self, token: Option<&str>) -> Result<DeltaPage> {
-        let mut first = self.request(&format!("{}/delta", self.base));
-        if let Some(t) = token {
-            first.query.push(("token".into(), t.to_owned()));
-        }
-        let mut out = DeltaPage::default();
-        let mut next = Some(first);
-        while let Some(req) = next.take() {
-            let doc: Value = self.t.send(&req).await?.json()?;
-            if let Some(v) = doc.get("value") {
-                out.items
-                    .extend(serde_json::from_value::<Vec<ListItem>>(v.clone())?);
-            }
-            if let Some(link) = doc.get("@odata.nextLink").and_then(Value::as_str) {
-                next = Some(RawRequest::new(Method::GET, link));
-            } else if let Some(link) = doc.get("@odata.deltaLink").and_then(Value::as_str) {
-                out.next_token = Url::parse(link).ok().and_then(|u| {
-                    u.query_pairs()
-                        .find(|(k, _)| k == "token")
-                        .map(|(_, v)| v.into_owned())
-                });
-            }
-        }
-        Ok(out)
-    }
-}
-query_methods!(ListItemsRequest);
-
-/// One list item.
-#[derive(Debug, Clone)]
-pub struct ListItemRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-}
-
-impl ListItemRequest {
-    /// Fetches the item.
-    pub async fn get(&self) -> Result<ListItem> {
-        get_json(&self.t, &self.base, &self.query).await
-    }
-
-    /// Updates the given columns and returns the resulting column values.
-    pub async fn update<F: Serialize>(&self, fields: &F) -> Result<Map<String, Value>> {
-        let mut req = RawRequest::new(Method::PATCH, format!("{}/fields", self.base));
-        req.body = Body::Json(serde_json::to_value(fields)?);
-        self.t.send(&req).await?.json()
-    }
-
-    /// Like [`update`](Self::update), but only if the item still has `etag` (sent as
-    /// `If-Match`); a changed item fails with HTTP 412.
-    pub async fn update_if_match<F: Serialize>(
-        &self,
-        fields: &F,
-        etag: &str,
-    ) -> Result<Map<String, Value>> {
-        let mut req = RawRequest::new(Method::PATCH, format!("{}/fields", self.base));
-        req.headers.push(("If-Match".into(), etag.to_owned()));
-        req.body = Body::Json(serde_json::to_value(fields)?);
-        self.t.send(&req).await?.json()
-    }
-
-    /// Deletes the item.
-    pub async fn delete(&self) -> Result<()> {
-        self.t
-            .send(&RawRequest::new(Method::DELETE, self.base.as_str()))
-            .await?;
-        Ok(())
-    }
-
-    /// The drive item behind an item of a document library; use it for file operations.
-    pub fn drive_item(&self) -> DriveItemRequest {
-        DriveItemRequest::new(self.t.clone(), format!("{}/driveItem", self.base))
-    }
-
-    /// Activity statistics of the item.
-    pub async fn analytics(&self) -> Result<ItemAnalytics> {
-        get_json(&self.t, &format!("{}/analytics", self.base), &self.query).await
-    }
-
-    /// The activities on the item, across all pages.
-    pub async fn activities(&self) -> Result<Vec<ItemActivity>> {
-        pager(&self.t, &format!("{}/activities", self.base), &self.query)
-            .collect_all()
-            .await
-    }
-
-    /// Restores the version with the given id (such as `1.0`).
-    pub async fn restore_version(&self, version_id: &str) -> Result<()> {
-        self.t
-            .send(&RawRequest::new(
-                Method::POST,
-                format!(
-                    "{}/versions/{}/restoreVersion",
-                    self.base,
-                    encode_path(version_id)
-                ),
-            ))
-            .await?;
-        Ok(())
-    }
-
-    /// The versions of the item, across all pages.
-    pub async fn versions(&self) -> Result<Vec<ItemVersion>> {
-        pager(&self.t, &format!("{}/versions", self.base), &self.query)
-            .collect_all()
-            .await
-    }
-}
-query_methods!(ListItemRequest);
-
-collection!(
-    /// A list's columns.
-    ListColumnsRequest => Column
-);
-creatable!(ListColumnsRequest => Column);
-
-impl ListColumnsRequest {
-    /// A column by id.
-    pub fn by_id(&self, id: &str) -> ListColumnRequest {
-        ListColumnRequest::new(self.t.clone(), format!("{}/{}", self.base, encode_path(id)))
-    }
-}
-
-entity!(
-    /// One list column.
-    ListColumnRequest => Column
-);
-
-impl ListColumnRequest {
-    /// Updates the column (PATCH) and returns it.
-    pub async fn update<F: Serialize>(&self, changes: &F) -> Result<Column> {
-        let mut req = RawRequest::new(Method::PATCH, self.base.as_str());
-        req.body = Body::Json(serde_json::to_value(changes)?);
-        self.t.send(&req).await?.json()
-    }
-}
-
-collection!(
-    /// A list's content types.
-    ListContentTypesRequest => ContentType
-);
-
-impl ListContentTypesRequest {
-    /// A content type by id.
-    pub fn by_id(&self, id: &str) -> ListContentTypeRequest {
-        ListContentTypeRequest::new(self.t.clone(), format!("{}/{}", self.base, encode_path(id)))
-    }
-
-    /// Adds a copy of a site content type to the list (`addCopy`).
-    ///
-    /// `content_type` is the site content type reference Graph expects, such as
-    /// `https://graph.microsoft.com/v1.0/sites/<site>/contentTypes/<id>`, or its id.
-    pub async fn add(&self, content_type: &str) -> Result<ContentType> {
-        let mut req = RawRequest::new(Method::POST, format!("{}/addCopy", self.base));
-        req.body = Body::Json(json!({ "contentType": content_type }));
-        self.t.send(&req).await?.json()
-    }
-}
-
-entity!(
-    /// One list content type.
-    ListContentTypeRequest => ContentType
-);
-
-/// Change-notification subscriptions on one list.
-#[derive(Debug, Clone)]
-pub struct ListSubscriptionsRequest {
-    t: Arc<Transport>,
-    resource: String,
-}
-
-impl ListSubscriptionsRequest {
-    /// Lists this app's subscriptions that watch the list.
-    pub async fn list(&self) -> Result<Vec<Subscription>> {
-        let all: Vec<Subscription> = pager(&self.t, "/subscriptions", &QueryOptions::new())
-            .collect_all()
-            .await?;
-        Ok(all
-            .into_iter()
-            .filter(|s| {
-                s.resource.as_deref().map(|r| r.trim_start_matches('/')) == Some(&self.resource)
-            })
-            .collect())
-    }
-
-    /// Subscribes to changes of the list.
-    pub async fn create(&self, new: &NewSubscription) -> Result<Subscription> {
-        let mut body = json!({
-            "changeType": new.change_type,
-            "notificationUrl": new.notification_url,
-            "resource": self.resource,
-            "expirationDateTime": new.expiration_date_time,
-        });
-        if let (Some(state), Some(o)) = (&new.client_state, body.as_object_mut()) {
-            o.insert("clientState".into(), Value::String(state.clone()));
-        }
-        let mut req = RawRequest::new(Method::POST, "/subscriptions");
-        req.body = Body::Json(body);
-        self.t.send(&req).await?.json()
-    }
-
-    /// Updates a subscription (for example `{"expirationDateTime": ...}`) and returns it.
-    pub async fn update<F: Serialize>(&self, id: &str, changes: &F) -> Result<Subscription> {
-        let mut req = RawRequest::new(Method::PATCH, format!("/subscriptions/{}", encode_path(id)));
-        req.body = Body::Json(serde_json::to_value(changes)?);
-        self.t.send(&req).await?.json()
-    }
-
-    /// Deletes a subscription.
-    pub async fn delete(&self, id: &str) -> Result<()> {
-        self.t
-            .send(&RawRequest::new(
-                Method::DELETE,
-                format!("/subscriptions/{}", encode_path(id)),
-            ))
-            .await?;
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 mod tests {

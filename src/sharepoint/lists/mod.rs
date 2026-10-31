@@ -2,17 +2,18 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use super::{Change, ChangeQuery, FolderInfo, Inner, ListInfo, PermissionsRequest, odata_str};
+use super::{Change, ChangeQuery, FolderInfo, Inner, PermissionsRequest};
 use crate::{
     Result,
     http::{Body, Pager, QueryOptions, query::query_methods},
-    sharepoint::web::{get_req, json_body, post, post_action},
+    sharepoint::inner::{get_req, json_body, post, post_action},
 };
 use serde_json::Value;
 
 mod content_types;
 mod fields;
 mod items;
+mod models;
 mod subscriptions;
 mod views;
 
@@ -20,6 +21,10 @@ pub use content_types::{ListContentTypeRequest, ListContentTypesRequest};
 pub use fields::{ListFieldRequest, ListFieldsRequest};
 pub use items::{
     AttachmentRequest, AttachmentsRequest, CommentsRequest, ItemRequest, ItemsRequest,
+};
+pub use models::{
+    Attachment, Comment, FieldResult, ItemVersion, ListInfo, ListItem, ListTemplate, NewList,
+    NewSubscription, RootFolder, Subscription, ValidateOptions, View,
 };
 pub use subscriptions::SubscriptionsRequest;
 pub use views::{ViewRequest, ViewsRequest};
@@ -175,10 +180,6 @@ impl ListRequest {
     }
 }
 query_methods!(ListRequest);
-
-pub(crate) fn name_literal(s: &str) -> String {
-    format!("'{}'", odata_str(s))
-}
 
 #[cfg(test)]
 mod tests {

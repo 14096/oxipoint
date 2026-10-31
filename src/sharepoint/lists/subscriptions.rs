@@ -3,13 +3,13 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use super::name_literal;
+use crate::sharepoint::inner::name_literal;
 use crate::{
     Result,
     http::{Body, Pager, QueryOptions, query::query_methods},
     sharepoint::{
         Inner, NewSubscription, Subscription,
-        web::{get_req, json_body, post},
+        inner::{get_req, json_body, post},
     },
 };
 

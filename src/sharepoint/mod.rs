@@ -7,7 +7,8 @@
 //! let web = sp.web().get().await?;
 //! let items = sp.list_by_title("Tasks").items().filter("Status eq 'Open'").top(50).list().await?;
 //! sp.folder("/sites/team/Shared Documents").upload("a.txt", "hello", true).await?;
-//! # let _ = (web, items); Ok(()) }
+//! let pages = sp.web().pages().list().await?;
+//! # let _ = (web, items, pages); Ok(()) }
 //! ```
 
 /// Defines a handle over a paged collection of `$item`.
@@ -38,7 +39,7 @@ macro_rules! collection {
             pub fn pages(&self) -> $crate::http::Pager<$item> {
                 $crate::http::Pager::new(
                     self.inner.t.clone(),
-                    $crate::sharepoint::web::get_req(&self.base, &self.query),
+                    $crate::sharepoint::inner::get_req(&self.base, &self.query),
                 )
             }
         }
@@ -69,7 +70,7 @@ macro_rules! entity {
             pub async fn get(&self) -> $crate::Result<$item> {
                 self.inner
                     .t
-                    .send(&$crate::sharepoint::web::get_req(&self.base, &self.query))
+                    .send(&$crate::sharepoint::inner::get_req(&self.base, &self.query))
                     .await?
                     .json()
             }
@@ -78,120 +79,56 @@ macro_rules! entity {
     };
 }
 
+mod changes;
+mod content_types;
+mod fields;
 mod files;
+mod inner;
 mod lists;
-mod models;
+#[cfg(test)]
+mod model_tests;
+mod pages;
+mod principals;
 mod web;
 
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 use reqwest::Method;
-use serde::Deserialize;
+
 use tokio::sync::Mutex;
 use url::Url;
 
-pub use files::{FileRequest, FolderRequest};
+pub use changes::{Change, ChangeQuery};
+pub use content_types::{ContentType, ContentTypeRequest, ContentTypesRequest};
+pub use fields::{Field, FieldRequest, FieldsRequest};
+pub use files::{FileInfo, FileRequest, FolderInfo, FolderRequest};
 pub use lists::{
-    AttachmentRequest, AttachmentsRequest, CommentsRequest, ItemRequest, ItemsRequest,
-    ListContentTypeRequest, ListContentTypesRequest, ListFieldRequest, ListFieldsRequest,
-    ListRequest, ListsRequest, SubscriptionsRequest, ViewRequest, ViewsRequest,
+    Attachment, AttachmentRequest, AttachmentsRequest, Comment, CommentsRequest, FieldResult,
+    ItemRequest, ItemVersion, ItemsRequest, ListContentTypeRequest, ListContentTypesRequest,
+    ListFieldRequest, ListFieldsRequest, ListInfo, ListItem, ListRequest, ListTemplate,
+    ListsRequest, NewList, NewSubscription, RootFolder, Subscription, SubscriptionsRequest,
+    ValidateOptions, View, ViewRequest, ViewsRequest,
 };
-pub use models::{
-    Attachment, BasePermissions, Change, ChangeQuery, Comment, ContentType, Feature, Field,
-    FieldResult, FileInfo, FolderInfo, ItemVersion, ListInfo, ListItem, ListTemplate,
-    NavigationNode, NewList, NewSubscription, NewWeb, PermissionKind, RecycleBinItem,
-    RegionalSettings, RoleAssignment, RoleDefinition, RootFolder, SiteGroup, SiteInfo, SpUser,
-    Subscription, TimeZone, ValidateOptions, View, Web,
+pub use pages::{NewSitePage, PageRequest, PagesRequest, SitePage};
+pub use principals::{
+    BasePermissions, PermissionKind, PermissionsRequest, RoleAssignment, RoleDefinition,
+    RoleDefinitionsRequest, SiteGroup, SiteGroupRequest, SiteGroupsRequest, SpUser, UserRequest,
+    UsersRequest,
 };
 pub use web::{
-    ContentTypeRequest, ContentTypesRequest, FeaturesRequest, FieldRequest, FieldsRequest,
-    NavigationNodeRequest, NavigationNodesRequest, NavigationRequest, PermissionsRequest,
-    RecycleBinItemRequest, RecycleBinRequest, RoleDefinitionsRequest, SiteGroupRequest,
-    SiteGroupsRequest, UserRequest, UsersRequest, WebRequest,
+    Feature, FeaturesRequest, NavigationNode, NavigationNodeRequest, NavigationNodesRequest,
+    NavigationRequest, NewWeb, RecycleBinItem, RecycleBinItemRequest, RecycleBinRequest,
+    RegionalSettings, SiteInfo, TimeZone, Web, WebRequest,
 };
+
+use inner::ACCEPT;
+pub(crate) use inner::{Inner, odata_str};
 
 use crate::{
     Error, Result,
     auth::{CachedCredential, TokenCredential},
-    http::{Body, RawRequest, RequestBuilder, Response, Transport, TransportConfig, encode_path},
+    http::{RequestBuilder, Transport, TransportConfig},
 };
-
-const ACCEPT: &str = "application/json;odata=nometadata";
-
-/// State shared by all handles of one client.
-#[derive(Debug)]
-pub(crate) struct Inner {
-    pub(crate) t: Arc<Transport>,
-    digest: Mutex<Option<(String, Instant)>>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct ContextInfo {
-    form_digest_value: String,
-    #[serde(default)]
-    form_digest_timeout_seconds: Option<u64>,
-}
-
-impl Inner {
-    /// Returns a cached or freshly requested form digest.
-    async fn digest(&self) -> Result<String> {
-        let mut cache = self.digest.lock().await;
-        if let Some((v, exp)) = cache.as_ref()
-            && Instant::now() < *exp
-        {
-            return Ok(v.clone());
-        }
-        let resp = self
-            .t
-            .send(&RawRequest::new(Method::POST, "/contextinfo"))
-            .await?;
-        let doc: serde_json::Value = resp.json()?;
-        let info: ContextInfo = match doc.pointer("/d/GetContextWebInformation") {
-            Some(v) => serde_json::from_value(v.clone())?,
-            None => serde_json::from_value(doc)?,
-        };
-        let ttl = info
-            .form_digest_timeout_seconds
-            .unwrap_or(1800)
-            .saturating_sub(60);
-        *cache = Some((
-            info.form_digest_value.clone(),
-            Instant::now() + Duration::from_secs(ttl),
-        ));
-        Ok(info.form_digest_value)
-    }
-
-    /// Sends a write request carrying the form digest.
-    pub(crate) async fn write(&self, mut req: RawRequest) -> Result<Response> {
-        let digest = self.digest().await?;
-        req.headers.push(("X-RequestDigest".into(), digest));
-        self.t.send(&req).await
-    }
-
-    /// POST with `X-HTTP-Method` tunnelling (MERGE / DELETE) and `IF-MATCH: *`.
-    pub(crate) async fn tunnel(&self, verb: &str, path: String, body: Body) -> Result<Response> {
-        self.tunnel_match(verb, path, body, "*").await
-    }
-
-    /// Like [`Inner::tunnel`] with an explicit `IF-MATCH` etag.
-    pub(crate) async fn tunnel_match(
-        &self,
-        verb: &str,
-        path: String,
-        body: Body,
-        etag: &str,
-    ) -> Result<Response> {
-        let mut req = RawRequest::new(Method::POST, path);
-        req.headers.push(("X-HTTP-Method".into(), verb.into()));
-        req.headers.push(("IF-MATCH".into(), etag.into()));
-        req.body = body;
-        self.write(req).await
-    }
-}
 
 /// Entry point for one SharePoint site (or web). Cheap to clone.
 #[derive(Debug, Clone)]
@@ -279,11 +216,6 @@ impl SharePointClient {
     }
 }
 
-/// Escapes a value for use inside an OData string literal in a URL path.
-pub(crate) fn odata_str(s: &str) -> String {
-    encode_path(&s.replace('\'', "''"))
-}
-
 #[cfg(test)]
 pub(crate) mod testutil {
     use super::*;
@@ -356,7 +288,7 @@ pub(crate) mod testutil {
             StaticTokenCredential::new("tok"),
             TransportConfig {
                 max_retries: 1,
-                default_retry_delay: Duration::from_millis(1),
+                default_retry_delay: std::time::Duration::from_millis(1),
                 ..Default::default()
             },
         )

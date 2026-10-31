@@ -6,15 +6,17 @@
 //! let graph = GraphClient::new(cred);
 //! let lists = graph.sites().by_path("contoso.sharepoint.com", "/sites/team").lists().list().await?;
 //! let items = graph.sites().root().list("list-id").items().expand("fields").top(10).list().await?;
-//! # let _ = (lists, items); Ok(()) }
+//! let pages = graph.sites().root().pages().list().await?;
+//! # let _ = (lists, items, pages); Ok(()) }
 //! ```
 
 #[macro_use]
 mod macros;
+mod common;
 mod drives;
 mod lists;
-mod models;
-mod site_parts;
+#[cfg(test)]
+mod model_tests;
 mod sites;
 mod users;
 
@@ -23,22 +25,21 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::de::DeserializeOwned;
 
-pub use drives::{DriveItemRequest, DriveRequest};
+pub use common::{ActivityCounts, Analytics, Identity, IdentitySet, ParentReference};
+pub use drives::{Drive, DriveItem, DriveItemRequest, DriveRequest};
 pub use lists::{
-    ListColumnRequest, ListColumnsRequest, ListContentTypeRequest, ListContentTypesRequest,
+    DeltaPage, ItemActivity, ItemAnalytics, ItemVersion, List, ListColumnRequest,
+    ListColumnsRequest, ListContentTypeRequest, ListContentTypesRequest, ListFacet, ListItem,
     ListItemRequest, ListItemsRequest, ListRequest, ListSubscriptionsRequest, ListsRequest,
+    NewSubscription, Subscription,
 };
-pub use models::{
-    ActivityCounts, Analytics, Column, ContentType, DeltaPage, Drive, DriveItem, Identity,
-    IdentitySet, ItemActivity, ItemAnalytics, ItemVersion, List, ListFacet, ListItem,
-    NewSubscription, ParentReference, Permission, Site, SiteCollection, Subscription, User,
+pub use sites::{
+    CanvasLayout, Column, ColumnRequest, ColumnsRequest, ContentType, ContentTypeRequest,
+    ContentTypesRequest, HorizontalSection, HorizontalSectionColumn, NewSitePage, PageRequest,
+    PagesRequest, Permission, PermissionRequest, PermissionsRequest, PublishingState, Site,
+    SiteCollection, SitePage, SiteRequest, SitesRequest, WebPart, WebPartRequest, WebPartsRequest,
 };
-pub use site_parts::{
-    ColumnRequest, ColumnsRequest, ContentTypeRequest, ContentTypesRequest, PermissionRequest,
-    PermissionsRequest,
-};
-pub use sites::{SiteRequest, SitesRequest};
-pub use users::{MeRequest, UserRequest, UsersRequest};
+pub use users::{MeRequest, User, UserRequest, UsersRequest};
 
 use crate::{
     Result,

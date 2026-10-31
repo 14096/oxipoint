@@ -1,10 +1,16 @@
+mod models;
+
+pub use models::{
+    BasePermissions, PermissionKind, RoleAssignment, RoleDefinition, SiteGroup, SpUser,
+};
+
 use std::sync::Arc;
 
-use super::{get_req, post_action};
+use crate::sharepoint::inner::{get_req, post_action};
 use crate::{
     Result,
     http::{Body, Pager, QueryOptions, query::query_methods},
-    sharepoint::{BasePermissions, Inner, RoleAssignment, RoleDefinition, SiteGroup, SpUser},
+    sharepoint::Inner,
 };
 
 collection!(
