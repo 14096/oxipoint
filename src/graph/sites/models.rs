@@ -118,6 +118,26 @@ pub struct Permission {
     /// Expiration time (ISO 8601).
     #[serde(default)]
     pub expiration_date_time: Option<String>,
+    /// Whether a sharing link is protected by a password.
+    #[serde(default)]
+    pub has_password: Option<bool>,
+}
+
+impl Permission {
+    /// The URL of a sharing link, when this permission is one.
+    pub fn link_url(&self) -> Option<&str> {
+        self.link.as_ref()?.get("webUrl")?.as_str()
+    }
+
+    /// The type of a sharing link (`view`, `edit`, ...).
+    pub fn link_type(&self) -> Option<&str> {
+        self.link.as_ref()?.get("type")?.as_str()
+    }
+
+    /// The scope of a sharing link (`anonymous`, `organization`, `users`).
+    pub fn link_scope(&self) -> Option<&str> {
+        self.link.as_ref()?.get("scope")?.as_str()
+    }
 }
 
 /// A modern SharePoint page of a site.

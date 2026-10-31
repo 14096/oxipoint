@@ -12,11 +12,13 @@
 
 #[macro_use]
 mod macros;
+mod batch;
 mod common;
 mod drives;
 mod lists;
 #[cfg(test)]
 mod model_tests;
+mod search;
 mod sites;
 mod users;
 
@@ -25,14 +27,20 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::de::DeserializeOwned;
 
+pub use batch::{GraphBatch, GraphBatchRequest, MAX_BATCH_REQUESTS};
 pub use common::{ActivityCounts, Analytics, Identity, IdentitySet, ParentReference};
-pub use drives::{Drive, DriveItem, DriveItemRequest, DriveRequest};
+pub use drives::{
+    ConflictBehavior, CopyOperation, CopyProgress, CopyStatus, Drive, DriveDeltaPage, DriveItem,
+    DriveItemRequest, DriveItemUpdate, DriveItemVersion, DriveRequest, Invite,
+    ItemPermissionRequest, ItemPermissionsRequest, LinkOptions, LinkScope, LinkType,
+};
 pub use lists::{
     DeltaPage, ItemActivity, ItemAnalytics, ItemVersion, List, ListColumnRequest,
     ListColumnsRequest, ListContentTypeRequest, ListContentTypesRequest, ListFacet, ListItem,
     ListItemRequest, ListItemsRequest, ListRequest, ListSubscriptionsRequest, ListsRequest,
     NewSubscription, Subscription,
 };
+pub use search::{GraphSearch, SearchHit, SearchPage};
 pub use sites::{
     CanvasLayout, Column, ColumnRequest, ColumnsRequest, ContentType, ContentTypeRequest,
     ContentTypesRequest, HorizontalSection, HorizontalSectionColumn, NewSitePage, PageRequest,
@@ -52,6 +60,47 @@ pub const DEFAULT_BASE_URL: &str = "https://graph.microsoft.com/v1.0";
 const SCOPE: &str = "https://graph.microsoft.com/.default";
 
 /// Entry point for Microsoft Graph. Cheap to clone.
+///
+/// # Files, sharing, search and batching
+/// ```no_run
+/// # async fn run(graph: rsp::graph::GraphClient) -> rsp::Result<()> {
+/// use reqwest::Method;
+/// use rsp::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
+/// use std::time::Duration;
+///
+/// let drive = graph.drive("<drive-id>");
+///
+/// // Folders, rename/move, copy (asynchronous on the service) and streamed download
+/// let folder = drive.root().create_folder("Reports", None).await?;
+/// let report = drive.path("Reports/q1.xlsx");
+/// report.update(&DriveItemUpdate::new().name("q1-final.xlsx")).await?;
+/// report.copy("<drive-id>", &folder.id, Some("backup.xlsx")).await?
+///     .wait(Duration::from_secs(2), Duration::from_secs(120)).await?;
+/// let mut out = tokio::fs::File::create("q1.xlsx").await?; // needs tokio's `fs` feature
+/// report.download_to(&mut out).await?;
+///
+/// // Everything that changed in a drive since the last sync
+/// let sync = drive.delta(None).await?;
+/// let _later = drive.delta(sync.next_token.as_deref()).await?;
+///
+/// // Sharing
+/// let link = report
+///     .create_link(&LinkOptions::new(LinkType::View).scope(LinkScope::Organization))
+///     .await?;
+/// println!("{:?}", link.link_url());
+///
+/// // Search
+/// let hits = graph.search().entity_types(["driveItem"]).query("budget").all().await?;
+///
+/// // Batching: up to 20 calls in one request, one result each
+/// let mut batch = graph.batch();
+/// batch.add(GraphBatchRequest::new(Method::GET, "/me"))?;
+/// batch.add(GraphBatchRequest::new(Method::GET, "/me/drive"))?;
+/// for result in batch.send().await? {
+///     let _value: serde_json::Value = result.json()?; // a failed call is an Err here
+/// }
+/// # let _ = hits; Ok(()) }
+/// ```
 #[derive(Debug, Clone)]
 pub struct GraphClient {
     t: Arc<Transport>,
@@ -136,6 +185,27 @@ impl GraphClient {
         pager(&self.t, "/me/followedSites", &QueryOptions::new())
             .collect_all()
             .await
+    }
+
+    /// Searches drive items, list items, sites and other entities (`/search/query`).
+    pub fn search(&self) -> GraphSearch {
+        GraphSearch::new(self.t.clone())
+    }
+
+    /// Starts a batch that sends up to 20 calls in one HTTP request.
+    pub fn batch(&self) -> GraphBatch {
+        GraphBatch::new(self.t.clone())
+    }
+
+    /// The item behind a sharing URL (`/shares`), without encoding the URL by hand.
+    pub fn shared_item(&self, sharing_url: &str) -> DriveItemRequest {
+        DriveItemRequest::new(
+            self.t.clone(),
+            format!(
+                "/shares/{}/driveItem",
+                drives::encode_share_url(sharing_url)
+            ),
+        )
     }
 
     /// A drive by id.

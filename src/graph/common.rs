@@ -85,4 +85,7 @@ pub struct ParentReference {
     /// Id of the site.
     #[serde(default)]
     pub site_id: Option<String>,
+    /// Id of the drive (drive items).
+    #[serde(default)]
+    pub drive_id: Option<String>,
 }

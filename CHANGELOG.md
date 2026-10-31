@@ -6,6 +6,28 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.1-beta4] - 2026-10-31
+
+### Added
+
+- **Streaming downloads**: `Transport::send_stream`, `StreamResponse`, `RequestBuilder::send_stream`
+  and `copy_to`, and typed `download_to(writer)` on Graph drive items and SharePoint files.
+  `download() -> Bytes` is unchanged.
+- **Graph drive items**: create folder (with conflict behavior), `update` (rename, move,
+  description), asynchronous `copy` with a `CopyOperation` monitor, versions (list, restore,
+  download), drive `delta` with token resume, and more `DriveItem` metadata (parent reference,
+  timestamps, identities, ETag, cTag, deleted facet, MIME type).
+- **SharePoint files and folders**: file copy, move and rename; folder delete, recycle, move, copy
+  and rename; `list_recursive`; check-out, check-in, undo check-out, publish, unpublish, approve and
+  deny; file versions (list, read, restore, delete, download); file properties through `expand`.
+- **Batching**: `GraphClient::batch` (`$batch`, 20 calls, dependencies) and
+  `SharePointClient::batch` (multipart `$batch` with changesets). A failing sub-request does not
+  fail the batch; each one has a `BatchResult`.
+- **Search**: `GraphClient::search` (`/search/query`) and `SharePointClient::search`
+  (`/_api/search/query`) with typed results and `all()` paging.
+- **Graph sharing**: `create_link`, `invite`, item `permissions`, and `GraphClient::shared_item` to
+  open a sharing URL. `Permission` gained `has_password`, `link_url`, `link_type` and `link_scope`.
+
 ## [0.0.1-beta3] - 2026-10-31
 
 ### Added

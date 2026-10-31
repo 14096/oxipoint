@@ -79,6 +79,7 @@ macro_rules! entity {
     };
 }
 
+mod batch;
 mod changes;
 mod content_types;
 mod fields;
@@ -89,6 +90,7 @@ mod lists;
 mod model_tests;
 mod pages;
 mod principals;
+mod search;
 mod web;
 
 use std::sync::Arc;
@@ -98,10 +100,13 @@ use reqwest::Method;
 use tokio::sync::Mutex;
 use url::Url;
 
+pub use batch::{SharePointBatch, SharePointBatchRequest};
 pub use changes::{Change, ChangeQuery};
 pub use content_types::{ContentType, ContentTypeRequest, ContentTypesRequest};
 pub use fields::{Field, FieldRequest, FieldsRequest};
-pub use files::{FileInfo, FileRequest, FolderInfo, FolderRequest};
+pub use files::{
+    CheckInKind, FileInfo, FileRequest, FileVersion, FolderEntry, FolderInfo, FolderRequest,
+};
 pub use lists::{
     Attachment, AttachmentRequest, AttachmentsRequest, Comment, CommentsRequest, FieldResult,
     ItemRequest, ItemVersion, ItemsRequest, ListContentTypeRequest, ListContentTypesRequest,
@@ -115,6 +120,7 @@ pub use principals::{
     RoleDefinitionsRequest, SiteGroup, SiteGroupRequest, SiteGroupsRequest, SpUser, UserRequest,
     UsersRequest,
 };
+pub use search::{SpSearch, SpSearchPage, SpSearchRow};
 pub use web::{
     Feature, FeaturesRequest, NavigationNode, NavigationNodeRequest, NavigationNodesRequest,
     NavigationRequest, NewWeb, RecycleBinItem, RecycleBinItemRequest, RecycleBinRequest,
@@ -131,6 +137,43 @@ use crate::{
 };
 
 /// Entry point for one SharePoint site (or web). Cheap to clone.
+///
+/// # Files, search and batching
+/// ```no_run
+/// # async fn run(sp: rsp::sharepoint::SharePointClient) -> rsp::Result<()> {
+/// use reqwest::Method;
+/// use rsp::sharepoint::{CheckInKind, SharePointBatchRequest};
+///
+/// let file = sp.file("/sites/team/Shared Documents/plan.docx");
+/// file.checkout().await?;
+/// file.checkin("Updated the schedule", CheckInKind::Major).await?;
+/// file.copy_to("/sites/team/Archive/plan.docx", false).await?;
+/// let versions = file.versions().await?;
+/// let mut out = tokio::fs::File::create("plan.docx").await?; // needs tokio's `fs` feature
+/// file.download_to(&mut out).await?;
+///
+/// let everything = sp.folder("/sites/team/Shared Documents").list_recursive(false).await?;
+///
+/// // Search
+/// let rows = sp.search("contract").select(["Title", "Path"]).all().await?;
+/// for row in &rows {
+///     println!("{:?}", row.get("Title"));
+/// }
+///
+/// // Batching: reads, plus writes that succeed or fail together
+/// let mut batch = sp.batch();
+/// batch.add(SharePointBatchRequest::new(Method::GET, "/web/title"))?;
+/// batch.add_changeset([
+///     SharePointBatchRequest::new(Method::POST, "/web/lists/getbytitle('Tasks')/items")
+///         .json(&serde_json::json!({ "Title": "A" }))?,
+///     SharePointBatchRequest::new(Method::POST, "/web/lists/getbytitle('Tasks')/items")
+///         .json(&serde_json::json!({ "Title": "B" }))?,
+/// ])?;
+/// for result in batch.send().await? {
+///     println!("{}", result.status);
+/// }
+/// # let _ = (versions, everything); Ok(()) }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SharePointClient {
     inner: Arc<Inner>,
@@ -177,6 +220,16 @@ impl SharePointClient {
     /// Generic request to any `/_api` path (relative) or absolute URL on the same host.
     pub fn request(&self, method: Method, path: impl Into<String>) -> RequestBuilder {
         RequestBuilder::new(self.inner.t.clone(), method, path)
+    }
+
+    /// Starts a search over the site collection (`/_api/search/query`) for `query_text`.
+    pub fn search(&self, query_text: &str) -> SpSearch {
+        SpSearch::new(self.inner.clone(), query_text)
+    }
+
+    /// Starts a batch that sends several calls in one HTTP request.
+    pub fn batch(&self) -> SharePointBatch {
+        SharePointBatch::new(self.inner.clone())
     }
 
     /// The web (site) itself and its subwebs.

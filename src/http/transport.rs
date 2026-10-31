@@ -1,7 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
+use bytes::Bytes;
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde_json::Value;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use url::Url;
 
 use super::{Body, RawRequest, Response};
@@ -94,6 +96,28 @@ impl Transport {
 
     /// Sends a request, retrying throttled responses, and returns the 2xx response.
     pub async fn send(&self, req: &RawRequest) -> Result<Response> {
+        let resp = self.execute(req).await?;
+        let status = resp.status().as_u16();
+        let headers = resp.headers().clone();
+        let body = resp.bytes().await?;
+        Ok(Response {
+            status,
+            headers,
+            body,
+        })
+    }
+
+    /// Like [`Transport::send`] but returns as soon as a 2xx status is seen, leaving the body
+    /// to be read in chunks. Retries, authentication and error mapping are identical.
+    pub async fn send_stream(&self, req: &RawRequest) -> Result<StreamResponse> {
+        Ok(StreamResponse {
+            inner: self.execute(req).await?,
+        })
+    }
+
+    /// Runs the request until it succeeds, fails with a non-retryable status or runs out of
+    /// retries. A non-2xx body is read in full and mapped to [`Error::Http`].
+    async fn execute(&self, req: &RawRequest) -> Result<reqwest::Response> {
         let url = self.build_url(req)?;
         let mut attempt = 0;
         loop {
@@ -112,15 +136,11 @@ impl Transport {
             };
             let resp = rb.send().await?;
             let status = resp.status();
+            if status.is_success() {
+                return Ok(resp);
+            }
             let headers = resp.headers().clone();
             let body = resp.bytes().await?;
-            if status.is_success() {
-                return Ok(Response {
-                    status: status.as_u16(),
-                    headers,
-                    body,
-                });
-            }
             let retryable = matches!(status.as_u16(), 429 | 503 | 504);
             if retryable && attempt < self.config.max_retries {
                 attempt += 1;
@@ -129,6 +149,42 @@ impl Transport {
             }
             return Err(parse_service_error(status.as_u16(), &headers, &body));
         }
+    }
+}
+
+/// A successful response whose body has not been read yet.
+#[derive(Debug)]
+pub struct StreamResponse {
+    inner: reqwest::Response,
+}
+
+impl StreamResponse {
+    /// Status code.
+    pub fn status(&self) -> u16 {
+        self.inner.status().as_u16()
+    }
+
+    /// Response headers.
+    pub fn headers(&self) -> &HeaderMap {
+        self.inner.headers()
+    }
+
+    /// Reads the next chunk of the body, or `None` at the end.
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
+        Ok(self.inner.chunk().await?)
+    }
+
+    /// Copies the rest of the body into `writer` and returns the number of bytes written.
+    ///
+    /// On a read failure the writer keeps what was written so far.
+    pub async fn copy_to<W: AsyncWrite + Unpin>(mut self, writer: &mut W) -> Result<u64> {
+        let mut total = 0u64;
+        while let Some(chunk) = self.chunk().await? {
+            writer.write_all(&chunk).await?;
+            total += chunk.len() as u64;
+        }
+        writer.flush().await?;
+        Ok(total)
     }
 }
 
@@ -311,5 +367,89 @@ mod tests {
             t.build_url(&r).unwrap().as_str(),
             "https://g.example.com/v1/me?%24select=a+b"
         );
+    }
+
+    #[tokio::test]
+    async fn streams_body_in_chunks_and_copies_to_writer() {
+        let server = MockServer::start().await;
+        let data = vec![7u8; 1 << 20];
+        Mock::given(method("GET"))
+            .and(path("/big"))
+            .and(header("authorization", "Bearer tok"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(data.clone()))
+            .mount(&server)
+            .await;
+        let t = transport(&server.uri(), 0);
+        let mut s = t
+            .send_stream(&RawRequest::new(Method::GET, "/big"))
+            .await
+            .unwrap();
+        assert_eq!(s.status(), 200);
+        let first = s.chunk().await.unwrap().unwrap();
+        assert!(!first.is_empty());
+
+        let mut out = Vec::new();
+        let n = t
+            .send_stream(&RawRequest::new(Method::GET, "/big"))
+            .await
+            .unwrap()
+            .copy_to(&mut out)
+            .await
+            .unwrap();
+        assert_eq!(n, 1_048_576);
+        assert_eq!(out, data);
+    }
+
+    #[tokio::test]
+    async fn stream_retries_before_handing_out_the_body() {
+        let server = MockServer::start().await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "0"))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&server)
+            .await;
+        let t = transport(&server.uri(), 2);
+        let mut out = Vec::new();
+        t.send_stream(&RawRequest::new(Method::GET, "/r"))
+            .await
+            .unwrap()
+            .copy_to(&mut out)
+            .await
+            .unwrap();
+        assert_eq!(out, b"ok");
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn stream_maps_error_status() {
+        let server = MockServer::start().await;
+        Mock::given(path("/missing"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(
+                serde_json::json!({"error":{"code":"itemNotFound","message":"gone"}}),
+            ))
+            .mount(&server)
+            .await;
+        let t = transport(&server.uri(), 0);
+        let e = t
+            .send_stream(&RawRequest::new(Method::GET, "/missing"))
+            .await
+            .unwrap_err();
+        assert_eq!(e.status(), Some(404));
+    }
+
+    #[tokio::test]
+    async fn stream_refuses_foreign_host() {
+        let server = MockServer::start().await;
+        let t = transport(&server.uri(), 0);
+        let e = t
+            .send_stream(&RawRequest::new(Method::GET, "https://evil.example.org/x"))
+            .await
+            .unwrap_err();
+        assert!(matches!(e, Error::Config(_)));
+        assert!(server.received_requests().await.unwrap().is_empty());
     }
 }

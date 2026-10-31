@@ -1,14 +1,18 @@
 //! Shared HTTP plumbing: transport with auth and retry, generic requests, paging.
 
+mod batch;
 mod pager;
 pub(crate) mod query;
 mod request;
 mod transport;
 
+pub use batch::BatchResult;
+#[cfg(any(feature = "graph", feature = "sharepoint"))]
+pub(crate) use batch::header_map;
 pub use pager::Pager;
 pub use query::QueryOptions;
 pub use request::{Body, RawRequest, RequestBuilder, Response};
-pub use transport::{Transport, TransportConfig};
+pub use transport::{StreamResponse, Transport, TransportConfig};
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 

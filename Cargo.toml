@@ -1,6 +1,6 @@
 [package]
 name = "rsp"
-version = "0.0.1-beta3"
+version = "0.0.1-beta4"
 edition = "2024"
 license = "MIT"
 
@@ -31,5 +31,5 @@ auth-certificate = ["dep:jsonwebtoken", "dep:p12-keystore"]
 auth-browser = ["dep:open"]
 
 [dev-dependencies]
-tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "fs"] }
 wiremock = "0.6.5"

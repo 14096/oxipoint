@@ -6,7 +6,8 @@ A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
 - Typed, chainable APIs for the main entities: sites and webs (navigation, users, groups,
   permissions, features, recycle bin), lists (fields, views, content types, webhooks), items
   (typed column values, validated writes, likes, comments, delta and change tracking), modern
-  pages (Graph and SharePoint REST), files and users.
+  pages (Graph and SharePoint REST), files and folders (copy, move, versions, streaming), search,
+  sharing links, batching and users.
 - Typed column values (`rsp::fields`) that serialize for either SharePoint or Graph.
 - A generic request builder for everything else, with the same authentication, retry and error handling.
 - Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
@@ -396,16 +397,102 @@ Tips:
 - Names containing spaces, quotes or `#` are escaped for you.
 - Updates and deletes are sent as `POST` with `X-HTTP-Method: MERGE|DELETE` and `IF-MATCH: *`.
 
+## Files, search, sharing and batching
+
+The core of these examples is compiled as a doctest on `GraphClient` and `SharePointClient`.
+
+```rust
+use reqwest::Method;
+use rsp::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
+use std::time::Duration;
+
+let drive = graph.drive("<drive-id>");
+
+// Folders, rename/move, copy (asynchronous on the service) and streamed download
+let folder = drive.root().create_folder("Reports", None).await?;
+let report = drive.path("Reports/q1.xlsx");
+report.update(&DriveItemUpdate::new().name("q1-final.xlsx")).await?;
+report.copy("<drive-id>", &folder.id, Some("backup.xlsx")).await?
+    .wait(Duration::from_secs(2), Duration::from_secs(120)).await?;
+let mut out = tokio::fs::File::create("q1.xlsx").await?;
+report.download_to(&mut out).await?;          // never holds the whole file in memory
+
+// Everything that changed in a drive since the last sync
+let sync = drive.delta(None).await?;
+let later = drive.delta(sync.next_token.as_deref()).await?;
+
+// Sharing links, invitations and permissions (Microsoft Graph)
+let link = report.create_link(&LinkOptions::new(LinkType::View).scope(LinkScope::Organization)).await?;
+println!("{:?}", link.link_url());
+let item = graph.shared_item("https://contoso.sharepoint.com/:x:/s/team/abc").get().await?;
+
+// Search
+let hits = graph.search().entity_types(["driveItem"]).query("budget").all().await?;
+
+// Batching: up to 20 calls in one request, one result each. A failed call does not fail the batch.
+let mut batch = graph.batch();
+batch.add(GraphBatchRequest::new(Method::GET, "/me"))?;
+batch.add(GraphBatchRequest::new(Method::GET, "/me/drive"))?;
+for result in batch.send().await? {
+    let value: serde_json::Value = result.json()?;   // a failed call is an Err here
+}
+```
+
+SharePoint REST has the equivalent file operations, plus check-out and publishing:
+
+```rust
+use rsp::sharepoint::{CheckInKind, SharePointBatchRequest};
+
+let file = sp.file("/sites/team/Shared Documents/plan.docx");
+file.checkout().await?;
+file.checkin("Updated the schedule", CheckInKind::Major).await?;
+file.copy_to("/sites/team/Archive/plan.docx", false).await?;   // false: do not overwrite
+file.rename("plan-v2.docx").await?;
+let versions = file.versions().await?;
+file.restore_version("1.0").await?;
+
+let everything = sp.folder("/sites/team/Shared Documents").list_recursive(false).await?;
+
+let rows = sp.search("contract").select(["Title", "Path"]).all().await?;
+println!("{:?}", rows[0].get("Title"));
+
+// One round trip: a read, and two writes that succeed or fail together
+let mut batch = sp.batch();
+batch.add(SharePointBatchRequest::new(Method::GET, "/web/title"))?;
+batch.add_changeset([
+    SharePointBatchRequest::new(Method::POST, "/web/lists/getbytitle('Tasks')/items")
+        .json(&serde_json::json!({ "Title": "A" }))?,
+    SharePointBatchRequest::new(Method::POST, "/web/lists/getbytitle('Tasks')/items")
+        .json(&serde_json::json!({ "Title": "B" }))?,
+])?;
+let results = batch.send().await?;
+```
+
+Notes:
+
+- `download_to` takes any `tokio::io::AsyncWrite`. The same streaming is available on the generic
+  builder as `request(...).copy_to(&mut writer)` and `send_stream()`.
+- Inside a batch, a throttled call (429) is reported with `BatchResult::retry_after()` and not
+  retried, because part of a batch cannot be replayed safely. Resend those calls in a new batch.
+- SharePoint search and batch use the REST wire formats documented by Microsoft. The multipart batch
+  and `SP.MoveCopyUtil` folder copy are tested against recorded response shapes, so try them on your
+  tenant before depending on them.
+- SharePoint REST has no typed sharing calls. Use Graph's `create_link` and `invite`, or the generic
+  request builder.
+
 ## What is covered
 
-| Entity            | SharePoint REST (`sp`)                                                                                          | Microsoft Graph (`graph`)                                                                            |
-| ----------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete) |
-| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                            | create, update, delete, columns, content types, subscriptions (no views or permissions)              |
-| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments          | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter     |
-| Modern pages      | list, read (canvas content), create, update, publish, delete                                                    | list, read (canvas layout), create, update, publish, delete, web parts                               |
-| Files and folders | read, upload, download, folders                                                                                 | drives, upload (resumable), download                                                                 |
-| Users             | current user, site users, groups, ensure user                                                                   | me, users                                                                                            |
+| Entity            | SharePoint REST (`sp`)                                                                                                                        | Microsoft Graph (`graph`)                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin                               | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete)           |
+| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                                                          | create, update, delete, columns, content types, subscriptions (no views or permissions)                        |
+| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments                                        | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter               |
+| Modern pages      | list, read (canvas content), create, update, publish, delete                                                                                  | list, read (canvas layout), create, update, publish, delete, web parts                                         |
+| Files and folders | read, upload, download (also streamed), folders, copy, move, rename, recursive listing, check-out and check-in, publish and approve, versions | drives, upload (resumable), download (also streamed), create folder, rename, move, copy, versions, drive delta |
+| Sharing           | not covered (use the generic builder or Graph)                                                                                                | sharing links, invitations, item permissions, open a sharing URL                                               |
+| Search            | query with select, sort, refiners and paging                                                                                                  | query over drive items, list items and sites, with paging                                                      |
+| Batching          | `$batch` with changesets                                                                                                                      | `$batch` (20 calls, dependencies)                                                                              |
+| Users             | current user, site users, groups, ensure user                                                                                                 | me, users                                                                                                      |
 
 Anything else is reachable with the generic request builder below.
 
@@ -413,7 +500,8 @@ Anything else is reachable with the generic request builder below.
 
 Both clients expose `request(method, path)`. It takes a path relative to the client's base URL
 (`/me/messages`, `/web/currentuser`) or an absolute URL on the **same host**, and returns a builder
-with `query`, `options`, `header`, `json`, `body`, `send`, `send_json` and `pager`.
+with `query`, `options`, `header`, `json`, `body`, `send`, `send_json`, `send_stream`, `copy_to`
+and `pager`.
 Authentication, throttling retries and error mapping all apply.
 
 ```rust
@@ -454,14 +542,14 @@ For writes to SharePoint through the generic builder, send an `X-RequestDigest` 
 
 All fallible calls return `rsp::Result<T>`. `rsp::Error` is `#[non_exhaustive]`:
 
-| Variant       | Meaning                                                                          |
-| ------------- | -------------------------------------------------------------------------------- |
-| `Auth`        | The identity platform refused a token (`code` such as `invalid_grant`, message). |
-| `Config`      | Bad local input: certificate, URL, or a request aimed at a foreign host.         |
-| `Http`        | Non-2xx service response: `status`, service `code`, `message`, `request_id`.     |
-| `Transport`   | Network or TLS failure.                                                          |
-| `Deserialize` | The body did not match the expected type.                                        |
-| `Io`          | Local I/O, for example the loopback listener of the browser flow.                |
+| Variant       | Meaning                                                                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Auth`        | The identity platform refused a token (`code` such as `invalid_grant`, message).                                                               |
+| `Config`      | Bad local input: certificate, URL, or a request aimed at a foreign host.                                                                       |
+| `Http`        | Non-2xx service response: `status`, service `code`, `message`, `request_id`. A failed Graph copy is reported as status 500, code `copyFailed`. |
+| `Transport`   | Network or TLS failure.                                                                                                                        |
+| `Deserialize` | The body did not match the expected type.                                                                                                      |
+| `Io`          | Local I/O: the browser flow's loopback listener, a writer given to `download_to`, or a copy wait that timed out.                               |
 
 ```rust
 match graph.me().get().await {
@@ -476,8 +564,9 @@ match graph.me().get().await {
 - **Paging**: `list()` collects every page; `pages()` / `pager()` return a `Pager` with
   `next_page()` and `collect_all()`. Graph, SharePoint light and verbose continuation links work.
 - **Credential safety**: the bearer token is only ever sent to the client's own host. A request or
-  continuation link pointing elsewhere fails with `Error::Config`. The only deliberate exception is
-  the pre-authorized upload URL of large Graph uploads, which is called without a token.
+  continuation link pointing elsewhere fails with `Error::Config`. The only deliberate exceptions are
+  pre-authorized URLs, which are called without a token: the upload session of large Graph uploads and
+  the monitor URL of a Graph copy.
 
 ## Cargo features
 
