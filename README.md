@@ -3,7 +3,10 @@
 A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
 
 - Four sign-in methods: username/password, certificate, interactive browser, device code.
-- Typed, chainable APIs for the most common resources (sites, lists, items, files, users).
+- Typed, chainable APIs for the main entities: sites and webs (navigation, users, groups,
+  permissions, features, recycle bin), lists (fields, views, content types, webhooks), items
+  (typed column values, validated writes, likes, comments, delta and change tracking), files and users.
+- Typed column values (`rsp::fields`) that serialize for either SharePoint or Graph.
 - A generic request builder for everything else, with the same authentication, retry and error handling.
 - Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
 
@@ -193,12 +196,94 @@ let new = site.list("Tasks").items().create(&json!({ "Title": "Write docs" })).a
 site.list("Tasks").item(&new.id).update(&json!({ "Title": "Docs done" })).await?;
 site.list("Tasks").item(&new.id).delete().await?;
 
+// Sites: subsites, columns, content types, permissions, lists, analytics
+let subsites = site.sites().await?;
+let child = site.site_by_path("child").get().await?;
+let columns = site.columns().list().await?;
+let types = site.content_types().list().await?;
+let perms = site.permissions().list().await?;
+let books = site.lists().create(&json!({ "displayName": "Books", "list": { "template": "genericList" } })).await?;
+site.list(&books.id).delete().await?;
+let followed = graph.followed_sites().await?;
+let stats = site.analytics().await?;
+
+// Lists: update, columns, content types, delta, versions, subscriptions
+let tasks = site.list("Tasks");
+tasks.update(&json!({ "description": "Team tasks" })).await?;
+let cols = tasks.columns().list().await?;
+let changes = tasks.items().delta(None).await?;                   // first sync
+let newer = tasks.items().delta(changes.next_token.as_deref()).await?; // resume
+let versions = tasks.item("1").versions().await?;
+tasks.subscriptions().create(&NewSubscription::new("https://example.com/hook", "2030-01-01T00:00:00Z")).await?;
+
 // Files (document libraries and OneDrive)
 let drive = site.drive();                     // or graph.me().drive(), graph.drive("<id>")
 let children = drive.root().children().await?;
 drive.path("Reports/q1.xlsx").upload(std::fs::read("q1.xlsx")?).await?; // > 4 MiB uses an upload session
 let bytes = drive.path("Reports/q1.xlsx").download().await?;
 ```
+
+Graph v1.0 exposes neither list views nor list permissions; use the SharePoint client
+(`sp.list_by_title("Tasks").views()` / `.permissions()`) for those.
+
+Graph has no way to update or delete a site, so the Graph client does not offer it. Use the
+SharePoint client (`sp.web().update(..)`, `sp.web().delete()`) for that and for other web features
+Graph lacks, such as navigation, features, regional settings and the recycle bin.
+
+### Typed column values
+
+`rsp::fields::Fields` builds column values once and serializes them for either back end, so you
+do not hand-write lookup or person JSON:
+
+```rust
+use rsp::fields::Fields;
+
+let f = Fields::new()
+    .text("Title", "Write docs")
+    .lookup("Project", 3)            // SharePoint: ProjectId = 3, Graph: ProjectLookupId = "3"
+    .multi_choice("Tags", vec!["a".into(), "b".into()])
+    .url("Link", "https://example.com", Some("Example"));
+
+site.list("Tasks").items().create(&f.for_graph()).await?;
+sp.list_by_title("Tasks").items().create(&f.for_sharepoint()).await?;
+
+// Reading: every reader returns None for a missing column or another kind
+let item = sp.list_by_title("Tasks").item(7).get().await?;
+let project = item.lookup("Project");          // Some(Lookup { id: 3, .. })
+let due = item.datetime("Due");                // parsed ISO 8601 (rsp::fields::DateTime)
+```
+
+Managed metadata has a SharePoint form for a single term only (`taxonomy`) and none on Graph.
+Unsupported combinations fail before anything is sent.
+
+SharePoint also validates writes per column and reads formatted values:
+
+```rust
+use rsp::sharepoint::ValidateOptions;
+let results = sp.list_by_title("Tasks").item(7)
+    .validate_update(&Fields::new().text("Title", "x"), &ValidateOptions::default()).await?;
+let rejected: Vec<_> = results.iter().filter(|r| !r.is_ok()).collect();
+let shown = sp.list_by_title("Tasks").item(7).field_values_as_text().await?;
+sp.list_by_title("Tasks").item(7).like().await?;
+sp.list_by_title("Tasks").item(7).comments().add("Done").await?;
+sp.list_by_title("Tasks").item(7).restore_version("2.0").await?;
+```
+
+Graph items add metadata (`created_by`, `e_tag`, ...), `drive_item()`, `analytics()`,
+`activities()`, `restore_version("1.0")`, `update_if_match(&fields, etag)` and
+`items().filter_unindexed("fields/Status eq 'Open'")` (sends the `Prefer` header Graph requires).
+
+| Concept                                       | SharePoint REST                    | Microsoft Graph                     |
+| --------------------------------------------- | ---------------------------------- | ----------------------------------- |
+| Item id                                       | number (`item(7)`)                 | string (`item("7")`)                |
+| Column values                                 | flat on the item                   | under `fields` (`expand("fields")`) |
+| Lookup / person                               | `<Col>Id`                          | `<Col>LookupId` (text)              |
+| Update                                        | `MERGE` of the item                | `PATCH` of `<item>/fields`          |
+| Etag guard                                    | `update_with_etag`                 | `update_if_match`                   |
+| Validated write, formatted values             | yes                                | no                                  |
+| Likes, comments                               | yes                                | no                                  |
+| Created by, drive item, analytics, activities | no (read columns such as `Author`) | yes                                 |
+| Restore a version                             | `restore_version("2.0")` (label)   | `restore_version("1.0")` (id)       |
 
 Query options available on collection handles: `select`, `filter`, `expand`, `order_by`, `top`, `search`.
 Use `.pages()` instead of `.list()` to consume a collection page by page.
@@ -219,7 +304,9 @@ the `application/json;odata=nometadata` format, and the form digest needed for w
 and cached for you.
 
 ```rust
-use rsp::sharepoint::SharePointClient;
+use rsp::sharepoint::{
+    ChangeQuery, ListTemplate, NewList, NewSubscription, NewWeb, PermissionKind, SharePointClient,
+};
 use serde_json::json;
 
 let sp = SharePointClient::new("https://contoso.sharepoint.com/sites/team", cred)?;
@@ -227,6 +314,44 @@ let sp = SharePointClient::new("https://contoso.sharepoint.com/sites/team", cred
 let web = sp.web().get().await?;
 let subwebs = sp.web().subwebs().await?;
 let lists = sp.lists().select(["Id", "Title", "ItemCount"]).list().await?;
+
+// The web entity: update, subwebs, navigation, columns, content types, users, permissions ...
+sp.web().update(&json!({ "Title": "Team site" })).await?;
+let child = sp.web().subweb("/sites/team/child");        // every call below also works on `child`
+sp.web().create_subweb(&NewWeb::new("Docs", "docs", "STS#3")).await?;
+sp.web().navigation().quick_launch().add("Wiki", "/sites/team/wiki").await?;
+let fields = sp.web().fields().list().await?;
+let doc_type = sp.web().content_types().by_id("0x0101").get().await?;
+let me = sp.web().current_user().await?;
+let user = sp.web().ensure_user("i:0#.f|membership|a@contoso.com").await?;
+let can_edit = sp.web().permissions().effective().await?.has(PermissionKind::EditListItems);
+sp.web().permissions().break_inheritance(true, false).await?;   // destructive; resets with reset_inheritance()
+sp.web().permissions().add_role_assignment(user.id, 1073741827).await?;
+let groups = sp.web().groups().by_id(5).users().list().await?;
+sp.web().features().activate("<feature-guid>").await?;
+let settings = sp.web().expand("TimeZone").regional_settings().await?;
+let bin = sp.web().recycle_bin().list().await?;
+
+// Create, update and delete lists
+let books = sp.lists().create(&NewList::new("Books", ListTemplate::GenericList).description("Reading list")).await?;
+sp.list_by_title("Books").update(&json!({ "Description": "Updated" })).await?;
+sp.list_by_title("Books").recycle().await?;                       // or .delete() to remove for good
+
+// Fields, views, content types
+let status = sp.list_by_title("Tasks").fields().by_internal_name("Status").get().await?;
+sp.list_by_title("Tasks").fields().create(&json!({ "Title": "Due", "FieldTypeKind": 4 })).await?;
+let all = sp.list_by_title("Tasks").views().by_title("All Items").fields().await?;
+sp.list_by_title("Tasks").content_types().add_from_web("0x0100...").await?;
+
+// CAML queries, counts, changes, attachments, versions, permissions, webhooks
+let list = sp.list_by_title("Tasks");
+let hits = list.items().caml("<View><Query><Where>...</Where></Query></View>").await?.collect_all().await?;
+let n = list.items().filter("Status eq 'Open'").count().await?;
+let ch = list.get_changes(&ChangeQuery::items()).await?;
+list.item(7).attachments().add("a.txt", "hello").await?;
+list.item(7).update_with_etag(&json!({ "Title": "x" }), "\"3\"").await?;  // fails if the item changed
+list.item(7).permissions().break_inheritance(false, false).await?;
+list.subscriptions().add(&NewSubscription::new("https://example.com/hook", "2030-01-01T00:00:00Z")).await?;
 
 // List items
 let tasks = sp.list_by_title("Tasks");
@@ -249,6 +374,18 @@ Tips:
 - List item columns other than `Id` are in `ListItem::fields` (a JSON map), keyed by internal name.
 - Names containing spaces, quotes or `#` are escaped for you.
 - Updates and deletes are sent as `POST` with `X-HTTP-Method: MERGE|DELETE` and `IF-MATCH: *`.
+
+## What is covered
+
+| Entity            | SharePoint REST (`sp`)                                                                                          | Microsoft Graph (`graph`)                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete) |
+| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                            | create, update, delete, columns, content types, subscriptions (no views or permissions)              |
+| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments          | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter     |
+| Files and folders | read, upload, download, folders                                                                                 | drives, upload (resumable), download                                                                 |
+| Users             | current user, site users, groups, ensure user                                                                   | me, users                                                                                            |
+
+Anything else is reachable with the generic request builder below.
 
 ## Calling endpoints that have no typed API
 

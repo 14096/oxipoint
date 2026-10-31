@@ -80,7 +80,7 @@ struct UploadSession {
 }
 
 impl DriveItemRequest {
-    fn new(t: Arc<Transport>, base: String) -> Self {
+    pub(crate) fn new(t: Arc<Transport>, base: String) -> Self {
         Self {
             t,
             base,

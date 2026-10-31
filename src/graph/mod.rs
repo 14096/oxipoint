@@ -9,8 +9,12 @@
 //! # let _ = (lists, items); Ok(()) }
 //! ```
 
+#[macro_use]
+mod macros;
 mod drives;
+mod lists;
 mod models;
+mod site_parts;
 mod sites;
 mod users;
 
@@ -20,10 +24,20 @@ use reqwest::Method;
 use serde::de::DeserializeOwned;
 
 pub use drives::{DriveItemRequest, DriveRequest};
-pub use models::{Drive, DriveItem, List, ListItem, Site, User};
-pub use sites::{
-    ListItemRequest, ListItemsRequest, ListRequest, ListsRequest, SiteRequest, SitesRequest,
+pub use lists::{
+    ListColumnRequest, ListColumnsRequest, ListContentTypeRequest, ListContentTypesRequest,
+    ListItemRequest, ListItemsRequest, ListRequest, ListSubscriptionsRequest, ListsRequest,
 };
+pub use models::{
+    ActivityCounts, Analytics, Column, ContentType, DeltaPage, Drive, DriveItem, Identity,
+    IdentitySet, ItemActivity, ItemAnalytics, ItemVersion, List, ListFacet, ListItem,
+    NewSubscription, ParentReference, Permission, Site, SiteCollection, Subscription, User,
+};
+pub use site_parts::{
+    ColumnRequest, ColumnsRequest, ContentTypeRequest, ContentTypesRequest, PermissionRequest,
+    PermissionsRequest,
+};
+pub use sites::{SiteRequest, SitesRequest};
 pub use users::{MeRequest, UserRequest, UsersRequest};
 
 use crate::{
@@ -114,6 +128,13 @@ impl GraphClient {
     /// Site lookup and search.
     pub fn sites(&self) -> SitesRequest {
         SitesRequest::new(self.t.clone())
+    }
+
+    /// Sites followed by the signed-in user, across all pages.
+    pub async fn followed_sites(&self) -> Result<Vec<Site>> {
+        pager(&self.t, "/me/followedSites", &QueryOptions::new())
+            .collect_all()
+            .await
     }
 
     /// A drive by id.

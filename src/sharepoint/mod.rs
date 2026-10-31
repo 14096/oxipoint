@@ -10,6 +10,74 @@
 //! # let _ = (web, items); Ok(()) }
 //! ```
 
+/// Defines a handle over a paged collection of `$item`.
+macro_rules! collection {
+    ($(#[$m:meta])* $name:ident => $item:ty) => {
+        $(#[$m])*
+        #[derive(Debug, Clone)]
+        pub struct $name {
+            inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
+            base: String,
+            query: $crate::http::QueryOptions,
+        }
+
+        impl $name {
+            pub(crate) fn new(
+                inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
+                base: String,
+            ) -> Self {
+                Self { inner, base, query: $crate::http::QueryOptions::new() }
+            }
+
+            /// Lists all items, following paging links.
+            pub async fn list(&self) -> $crate::Result<Vec<$item>> {
+                self.pages().collect_all().await
+            }
+
+            /// Returns a pager.
+            pub fn pages(&self) -> $crate::http::Pager<$item> {
+                $crate::http::Pager::new(
+                    self.inner.t.clone(),
+                    $crate::sharepoint::web::get_req(&self.base, &self.query),
+                )
+            }
+        }
+        $crate::http::query::query_methods!($name);
+    };
+}
+
+/// Defines a handle over a single `$item` that can be read.
+macro_rules! entity {
+    ($(#[$m:meta])* $name:ident => $item:ty) => {
+        $(#[$m])*
+        #[derive(Debug, Clone)]
+        pub struct $name {
+            inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
+            base: String,
+            query: $crate::http::QueryOptions,
+        }
+
+        impl $name {
+            pub(crate) fn new(
+                inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
+                base: String,
+            ) -> Self {
+                Self { inner, base, query: $crate::http::QueryOptions::new() }
+            }
+
+            /// Fetches the entity.
+            pub async fn get(&self) -> $crate::Result<$item> {
+                self.inner
+                    .t
+                    .send(&$crate::sharepoint::web::get_req(&self.base, &self.query))
+                    .await?
+                    .json()
+            }
+        }
+        $crate::http::query::query_methods!($name);
+    };
+}
+
 mod files;
 mod lists;
 mod models;
@@ -26,9 +94,24 @@ use tokio::sync::Mutex;
 use url::Url;
 
 pub use files::{FileRequest, FolderRequest};
-pub use lists::{ItemRequest, ItemsRequest, ListRequest, ListsRequest};
-pub use models::{FileInfo, FolderInfo, ListInfo, ListItem, Web};
-pub use web::WebRequest;
+pub use lists::{
+    AttachmentRequest, AttachmentsRequest, CommentsRequest, ItemRequest, ItemsRequest,
+    ListContentTypeRequest, ListContentTypesRequest, ListFieldRequest, ListFieldsRequest,
+    ListRequest, ListsRequest, SubscriptionsRequest, ViewRequest, ViewsRequest,
+};
+pub use models::{
+    Attachment, BasePermissions, Change, ChangeQuery, Comment, ContentType, Feature, Field,
+    FieldResult, FileInfo, FolderInfo, ItemVersion, ListInfo, ListItem, ListTemplate,
+    NavigationNode, NewList, NewSubscription, NewWeb, PermissionKind, RecycleBinItem,
+    RegionalSettings, RoleAssignment, RoleDefinition, RootFolder, SiteGroup, SiteInfo, SpUser,
+    Subscription, TimeZone, ValidateOptions, View, Web,
+};
+pub use web::{
+    ContentTypeRequest, ContentTypesRequest, FeaturesRequest, FieldRequest, FieldsRequest,
+    NavigationNodeRequest, NavigationNodesRequest, NavigationRequest, PermissionsRequest,
+    RecycleBinItemRequest, RecycleBinRequest, RoleDefinitionsRequest, SiteGroupRequest,
+    SiteGroupsRequest, UserRequest, UsersRequest, WebRequest,
+};
 
 use crate::{
     Error, Result,
@@ -91,9 +174,20 @@ impl Inner {
 
     /// POST with `X-HTTP-Method` tunnelling (MERGE / DELETE) and `IF-MATCH: *`.
     pub(crate) async fn tunnel(&self, verb: &str, path: String, body: Body) -> Result<Response> {
+        self.tunnel_match(verb, path, body, "*").await
+    }
+
+    /// Like [`Inner::tunnel`] with an explicit `IF-MATCH` etag.
+    pub(crate) async fn tunnel_match(
+        &self,
+        verb: &str,
+        path: String,
+        body: Body,
+        etag: &str,
+    ) -> Result<Response> {
         let mut req = RawRequest::new(Method::POST, path);
         req.headers.push(("X-HTTP-Method".into(), verb.into()));
-        req.headers.push(("IF-MATCH".into(), "*".into()));
+        req.headers.push(("IF-MATCH".into(), etag.into()));
         req.body = body;
         self.write(req).await
     }
@@ -207,6 +301,62 @@ pub(crate) mod testutil {
             StaticTokenCredential::new("tok"),
             TransportConfig {
                 max_retries: 0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        (c, server)
+    }
+
+    pub async fn mock_get(s: &MockServer, p: &str, resp: serde_json::Value) {
+        Mock::given(method("GET"))
+            .and(path(p))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(s)
+            .await;
+    }
+
+    /// Mounts a digest-protected POST; `tunnel` is the expected `X-HTTP-Method`.
+    pub async fn mock_write(
+        s: &MockServer,
+        p: &str,
+        tunnel: Option<&str>,
+        body: Option<serde_json::Value>,
+        resp: serde_json::Value,
+    ) {
+        use wiremock::matchers::{body_json, header};
+        let b = Mock::given(method("POST"))
+            .and(path(p))
+            .and(header("x-requestdigest", "DIGEST"));
+        let b = match tunnel {
+            Some(v) => b
+                .and(header("x-http-method", v))
+                .and(header("if-match", "*")),
+            None => b,
+        };
+        let b = match body {
+            Some(v) => b.and(body_json(v)),
+            None => b,
+        };
+        b.respond_with(if resp.is_null() {
+            ResponseTemplate::new(204)
+        } else {
+            ResponseTemplate::new(200).set_body_json(resp)
+        })
+        .expect(1)
+        .mount(s)
+        .await;
+    }
+
+    pub async fn client_retrying() -> (SharePointClient, MockServer) {
+        let server = MockServer::start().await;
+        let c = SharePointClient::with_config(
+            &server.uri(),
+            StaticTokenCredential::new("tok"),
+            TransportConfig {
+                max_retries: 1,
+                default_retry_delay: Duration::from_millis(1),
                 ..Default::default()
             },
         )

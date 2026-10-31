@@ -6,6 +6,42 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.1-beta2] - 2026-10-31
+
+### Added
+
+- **`rsp::fields`**: typed list item column values (`Fields`, `FieldValue`) that serialize for
+  SharePoint (`for_sharepoint()`) or Graph (`for_graph()`), typed readers (`text`, `number`,
+  `bool`, `datetime`, `url`, `lookup`, `person`, `taxonomy`) on both `ListItem` types, and a
+  dependency-free ISO 8601 `DateTime`. Unsupported kind and back-end pairs fail before sending.
+- **SharePoint web**: update and delete, create subweb (`NewWeb`) and subweb by URL (every
+  sub-handle also works on subwebs), navigation, fields, content types, users and groups, role
+  definitions and assignments, effective permissions with `BasePermissions::has`, break and reset
+  inheritance, features, regional settings, recycle bin, parent web, site collection info, root
+  folder, list and web templates. `Web` gained language, timestamps, template and master page URL.
+- **SharePoint lists**: create (`NewList`, `ListTemplate`), update, delete and recycle; root folder
+  and forms; fields, views and content types; role assignments and inheritance on lists and items;
+  webhook subscriptions. `ListInfo` gained template, type, hidden, timestamps, versioning and
+  content type flags.
+- **SharePoint items**: CAML queries, `count`, `get_changes` with `ChangeQuery`, attachments,
+  versions, recycle, update with etag; validated create and update with per-column results;
+  formatted values (text, HTML, edit form); content type, parent list, file and folder reads;
+  like and unlike, liked-by, comments; restore version by label.
+- **Graph sites**: subsites (list, by id, by path), columns, content types, permissions (list,
+  read, create, update, delete), `analytics()` and `followed_sites()`. `Site` gained description,
+  timestamps, root and site collection information.
+- **Graph lists**: create, update (PATCH) and delete; columns; content types (`addCopy`);
+  change-notification subscriptions. `List` gained description, timestamps and template/hidden
+  flags.
+- **Graph items**: delta queries with token resume, versions and `restore_version`, created and
+  modified metadata with `IdentitySet`, `drive_item()`, `analytics()`, `activities()`,
+  `update_if_match` and `filter_unindexed`.
+
+### Changed
+
+- Internal: SharePoint and Graph list code was split into submodules (`sharepoint/web/`,
+  `sharepoint/lists/`, `graph/lists.rs`); the public API only grew.
+
 ## [0.0.1-beta] - 2026-10-31
 
 ### Added

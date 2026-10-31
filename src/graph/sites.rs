@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use reqwest::Method;
-use serde::Serialize;
-use serde_json::{Map, Value, json};
-
-use super::{Drive, DriveRequest, List, ListItem, Site, get_json, pager};
+use super::{
+    Analytics, ColumnsRequest, ContentTypesRequest, Drive, DriveRequest, ListRequest, ListsRequest,
+    PermissionsRequest, Site, get_json, pager,
+};
 use crate::{
     Result,
-    http::{Body, Pager, QueryOptions, RawRequest, Transport, encode_path, query::query_methods},
+    http::{Pager, QueryOptions, Transport, encode_path, query::query_methods},
 };
 
 /// `/sites` — site lookup and search.
@@ -70,20 +69,70 @@ impl SiteRequest {
 
     /// The site's lists.
     pub fn lists(&self) -> ListsRequest {
-        ListsRequest {
-            t: self.t.clone(),
-            base: format!("{}/lists", self.base),
-            query: QueryOptions::new(),
-        }
+        ListsRequest::new(self.t.clone(), format!("{}/lists", self.base))
     }
 
     /// A list by id or display name.
     pub fn list(&self, id_or_name: &str) -> ListRequest {
-        ListRequest {
-            t: self.t.clone(),
-            base: format!("{}/lists/{}", self.base, encode_path(id_or_name)),
-            query: QueryOptions::new(),
-        }
+        ListRequest::new(
+            self.t.clone(),
+            format!("{}/lists/{}", self.base, encode_path(id_or_name)),
+        )
+    }
+
+    /// The site's subsites, across all pages.
+    pub async fn sites(&self) -> Result<Vec<Site>> {
+        pager(
+            &self.t,
+            &format!("{}/sites", self.base),
+            &QueryOptions::new(),
+        )
+        .collect_all()
+        .await
+    }
+
+    /// A subsite by id.
+    pub fn subsite(&self, id: &str) -> SiteRequest {
+        SiteRequest::new(
+            self.t.clone(),
+            format!("{}/sites/{}", self.base, encode_path(id)),
+        )
+    }
+
+    /// A subsite by path relative to this site, e.g. `"child"` or `"child/grandchild"`.
+    ///
+    /// Uses the `getByPath(path='...')` form.
+    pub fn site_by_path(&self, path: &str) -> SiteRequest {
+        let p = encode_path(&path.trim_matches('/').replace('\'', "''"));
+        SiteRequest::new(
+            self.t.clone(),
+            format!("{}/getByPath(path='{p}')", self.base),
+        )
+    }
+
+    /// The site's columns.
+    pub fn columns(&self) -> ColumnsRequest {
+        ColumnsRequest::new(self.t.clone(), format!("{}/columns", self.base))
+    }
+
+    /// The site's content types.
+    pub fn content_types(&self) -> ContentTypesRequest {
+        ContentTypesRequest::new(self.t.clone(), format!("{}/contentTypes", self.base))
+    }
+
+    /// The site's permissions.
+    pub fn permissions(&self) -> PermissionsRequest {
+        PermissionsRequest::new(self.t.clone(), format!("{}/permissions", self.base))
+    }
+
+    /// All-time activity statistics of the site.
+    pub async fn analytics(&self) -> Result<Analytics> {
+        get_json(
+            &self.t,
+            &format!("{}/analytics/allTime", self.base),
+            &QueryOptions::new(),
+        )
+        .await
     }
 
     /// The default document library.
@@ -104,127 +153,13 @@ impl SiteRequest {
 }
 query_methods!(SiteRequest);
 
-/// A site's lists.
-#[derive(Debug, Clone)]
-pub struct ListsRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-}
-
-impl ListsRequest {
-    /// Lists all lists, following paging links.
-    pub async fn list(&self) -> Result<Vec<List>> {
-        self.pages().collect_all().await
-    }
-
-    /// Returns a pager.
-    pub fn pages(&self) -> Pager<List> {
-        pager(&self.t, &self.base, &self.query)
-    }
-}
-query_methods!(ListsRequest);
-
-/// One list.
-#[derive(Debug, Clone)]
-pub struct ListRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-}
-
-impl ListRequest {
-    /// Fetches the list.
-    pub async fn get(&self) -> Result<List> {
-        get_json(&self.t, &self.base, &self.query).await
-    }
-
-    /// The list's items.
-    pub fn items(&self) -> ListItemsRequest {
-        ListItemsRequest {
-            t: self.t.clone(),
-            base: format!("{}/items", self.base),
-            query: QueryOptions::new(),
-        }
-    }
-
-    /// One item by id.
-    pub fn item(&self, id: &str) -> ListItemRequest {
-        ListItemRequest {
-            t: self.t.clone(),
-            base: format!("{}/items/{}", self.base, encode_path(id)),
-            query: QueryOptions::new(),
-        }
-    }
-}
-query_methods!(ListRequest);
-
-/// A list's items collection.
-#[derive(Debug, Clone)]
-pub struct ListItemsRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-}
-
-impl ListItemsRequest {
-    /// Lists items, following paging links. Use `.expand("fields")` to include column values.
-    pub async fn list(&self) -> Result<Vec<ListItem>> {
-        self.pages().collect_all().await
-    }
-
-    /// Returns a pager.
-    pub fn pages(&self) -> Pager<ListItem> {
-        pager(&self.t, &self.base, &self.query)
-    }
-
-    /// Creates an item from a serializable set of column values.
-    pub async fn create<F: Serialize>(&self, fields: &F) -> Result<ListItem> {
-        let mut req = RawRequest::new(Method::POST, self.base.as_str());
-        req.body = Body::Json(json!({ "fields": serde_json::to_value(fields)? }));
-        self.t.send(&req).await?.json()
-    }
-}
-query_methods!(ListItemsRequest);
-
-/// One list item.
-#[derive(Debug, Clone)]
-pub struct ListItemRequest {
-    t: Arc<Transport>,
-    base: String,
-    query: QueryOptions,
-}
-
-impl ListItemRequest {
-    /// Fetches the item.
-    pub async fn get(&self) -> Result<ListItem> {
-        get_json(&self.t, &self.base, &self.query).await
-    }
-
-    /// Updates the given columns and returns the resulting column values.
-    pub async fn update<F: Serialize>(&self, fields: &F) -> Result<Map<String, Value>> {
-        let mut req = RawRequest::new(Method::PATCH, format!("{}/fields", self.base));
-        req.body = Body::Json(serde_json::to_value(fields)?);
-        self.t.send(&req).await?.json()
-    }
-
-    /// Deletes the item.
-    pub async fn delete(&self) -> Result<()> {
-        self.t
-            .send(&RawRequest::new(Method::DELETE, self.base.as_str()))
-            .await?;
-        Ok(())
-    }
-}
-query_methods!(ListItemRequest);
-
 #[cfg(test)]
 mod tests {
-    use crate::{Error, graph::testutil::client};
+    use crate::graph::testutil::client;
     use serde_json::json;
     use wiremock::{
         Mock, ResponseTemplate,
-        matchers::{body_json, method, path, query_param},
+        matchers::{method, path, query_param},
     };
 
     #[tokio::test]
@@ -292,65 +227,57 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_item_returns_id() {
+    async fn subsites_list_pages_and_by_path() {
         let (c, s) = client().await;
-        Mock::given(method("POST"))
-            .and(path("/sites/s1/lists/L/items"))
-            .and(body_json(json!({"fields":{"Title":"New"}})))
-            .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id":"42"})))
+        let next = format!("{}/sites/s1/sites?p=2", s.uri());
+        Mock::given(path("/sites/s1/sites"))
+            .and(query_param("p", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"value":[{"id":"b"}]})))
             .mount(&s)
             .await;
-        let item = c
-            .sites()
-            .by_id("s1")
-            .list("L")
-            .items()
-            .create(&json!({"Title":"New"}))
-            .await
-            .unwrap();
-        assert_eq!(item.id, "42");
-    }
-
-    #[tokio::test]
-    async fn update_and_delete_item() {
-        let (c, s) = client().await;
-        Mock::given(method("PATCH"))
-            .and(path("/sites/s1/lists/L/items/7/fields"))
-            .and(body_json(json!({"Title":"T2"})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"Title":"T2"})))
-            .mount(&s)
-            .await;
-        Mock::given(method("DELETE"))
-            .and(path("/sites/s1/lists/L/items/7"))
-            .respond_with(ResponseTemplate::new(204))
-            .mount(&s)
-            .await;
-        let item = c.sites().by_id("s1").list("L").item("7");
-        assert_eq!(
-            item.update(&json!({"Title":"T2"})).await.unwrap()["Title"],
-            "T2"
-        );
-        item.delete().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn delete_missing_item_is_404() {
-        let (c, s) = client().await;
-        Mock::given(method("DELETE"))
+        Mock::given(path("/sites/s1/sites"))
             .respond_with(
-                ResponseTemplate::new(404)
-                    .set_body_json(json!({"error":{"code":"itemNotFound","message":"x"}})),
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"value":[{"id":"a"}],"@odata.nextLink":next})),
             )
             .mount(&s)
             .await;
-        let e = c
-            .sites()
-            .by_id("s1")
-            .list("L")
-            .item("9")
-            .delete()
-            .await
-            .unwrap_err();
-        assert!(matches!(e, Error::Http { status: 404, .. }));
+        Mock::given(path("/sites/s1/sites/sub1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id":"sub1"})))
+            .mount(&s)
+            .await;
+        Mock::given(path("/sites/s1/getByPath(path='child')"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"id":"c","displayName":"Child"})),
+            )
+            .expect(1)
+            .mount(&s)
+            .await;
+        let site = c.sites().by_id("s1");
+        assert_eq!(site.sites().await.unwrap().len(), 2);
+        assert_eq!(site.subsite("sub1").get().await.unwrap().id, "sub1");
+        let child = site.site_by_path("/child/").get().await.unwrap();
+        assert_eq!(child.display_name.as_deref(), Some("Child"));
+    }
+
+    #[tokio::test]
+    async fn followed_sites_and_analytics() {
+        let (c, s) = client().await;
+        Mock::given(path("/me/followedSites"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"value":[{"id":"f1"}]})))
+            .expect(1)
+            .mount(&s)
+            .await;
+        Mock::given(path("/sites/s1/analytics/allTime"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"access":{"actionCount":10,"actorCount":4}})),
+            )
+            .expect(1)
+            .mount(&s)
+            .await;
+        assert_eq!(c.followed_sites().await.unwrap()[0].id, "f1");
+        let a = c.sites().by_id("s1").analytics().await.unwrap();
+        assert_eq!(a.access.unwrap().actor_count, Some(4));
     }
 }
