@@ -1,0 +1,338 @@
+# rsp
+
+A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
+
+- Four sign-in methods: username/password, certificate, interactive browser, device code.
+- Typed, chainable APIs for the most common resources (sites, lists, items, files, users).
+- A generic request builder for everything else, with the same authentication, retry and error handling.
+- Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
+
+```rust
+use rsp::{auth::DeviceCodeCredential, graph::GraphClient};
+
+#[tokio::main]
+async fn main() -> rsp::Result<()> {
+    let cred = DeviceCodeCredential::new("contoso.onmicrosoft.com", "<client-id>", |info| {
+        println!("{}", info.message);
+    });
+    let graph = GraphClient::new(cred);
+
+    let me = graph.me().select(["displayName", "mail"]).get().await?;
+    println!("Hello {}", me.display_name.unwrap_or_default());
+    Ok(())
+}
+```
+
+## Authentication
+
+Every sign-in method implements `auth::TokenCredential`, so any of them works with both
+`GraphClient` and `SharePointClient`. Pick the method by who the program acts as:
+
+| Flow                       | Acts as            | Type                    | Feature            |
+| -------------------------- | ------------------ | ----------------------- | ------------------ |
+| Interactive browser (PKCE) | the signed-in user | `BrowserCredential`     | `auth-browser`     |
+| Device code                | the signed-in user | `DeviceCodeCredential`  | `auth-device-code` |
+| Username/password          | a user, no prompt  | `PasswordCredential`    | `auth-password`    |
+| Certificate                | the application    | `CertificateCredential` | `auth-certificate` |
+
+Rules of thumb:
+
+- **Tools used by people**: browser (desktop) or device code (SSH sessions, servers, no browser).
+- **Unattended jobs and services**: certificate. This is also the only app-only method that
+  SharePoint REST accepts (it rejects client secrets).
+- **Username/password** is a legacy flow. It fails for accounts with MFA, federated sign-in or
+  conditional access, and Microsoft discourages it. Use it only for service accounts in test tenants.
+
+### Parameters
+
+- **tenant**: the tenant ID (GUID) **or** a verified domain such as `contoso.onmicrosoft.com`.
+  The short name `contoso` is not valid. Delegated flows also accept `organizations` (work or
+  school accounts from any tenant) and `common`. Certificate auth needs a real tenant ID or domain.
+- **client_id**: the Application (client) ID of your Entra app registration.
+
+### Setting up the app registration (Entra ID, app registrations)
+
+Common to all flows:
+
+1. Create an app registration and note its **Application (client) ID** and **Directory (tenant) ID**.
+2. Under **API permissions**, add what you need and grant admin consent where required:
+   - Graph: for example `Sites.ReadWrite.All`, `Files.ReadWrite.All`, `User.Read`
+     (_delegated_ for user flows, _application_ for certificate).
+   - SharePoint REST: for example `AllSites.Read` / `AllSites.FullControl` (delegated) or
+     `Sites.Selected` / `Sites.ReadWrite.All` (application) on _SharePoint_.
+
+The SDK requests the `/.default` scope (`https://graph.microsoft.com/.default` and
+`https://<tenant>.sharepoint.com/.default`), so it receives the permissions that are consented
+on the app registration. If a call returns 403, the permission or the consent is missing there.
+
+Per flow:
+
+| Flow              | Authentication settings to configure                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Browser           | Add platform **Mobile and desktop** with redirect URI `http://localhost`. Enable public client. |
+| Device code       | **Allow public client flows** = Yes.                                                            |
+| Username/password | **Allow public client flows** = Yes; user must not require MFA.                                 |
+| Certificate       | Upload the public certificate under **Certificates & secrets**. Use application permissions.    |
+
+### Interactive browser
+
+Opens the system browser, listens on `http://localhost:<port>` for the redirect, and exchanges
+the code with PKCE. The `state` value is verified, and the wait times out after 5 minutes.
+
+```rust
+use std::time::Duration;
+use rsp::auth::BrowserCredential;
+
+let cred = BrowserCredential::new("contoso.onmicrosoft.com", "<client-id>")
+    .with_port(8400)                     // optional: fixed port (default: random free port)
+    .with_timeout(Duration::from_secs(120)); // optional
+```
+
+### Device code
+
+Prints a code the user enters at `https://microsoft.com/devicelogin` on any device. The callback
+receives `DeviceCodeInfo` (`user_code`, `verification_uri`, `message`, ...); show it however you like.
+
+```rust
+use rsp::auth::DeviceCodeCredential;
+
+let cred = DeviceCodeCredential::new("contoso.onmicrosoft.com", "<client-id>", |info| {
+    println!("{}", info.message);
+});
+```
+
+### Username and password
+
+```rust
+use rsp::auth::PasswordCredential;
+
+let cred = PasswordCredential::new(
+    "contoso.onmicrosoft.com",
+    "<client-id>",
+    "user@contoso.com",
+    std::env::var("APP_PASSWORD").unwrap(), // never hardcode passwords
+);
+```
+
+### Certificate
+
+Needs the certificate and its RSA private key, either as PEM or as a PFX (PKCS#12) file. Invalid
+material is reported as `Error::Config` before any network call.
+
+```rust
+use rsp::auth::CertificateCredential;
+
+// PEM certificate + PKCS#8/PKCS#1 private key
+let cred = CertificateCredential::from_pem(
+    "<tenant-id>", "<client-id>",
+    &std::fs::read_to_string("cert.pem")?,
+    &std::fs::read_to_string("key.pem")?,
+)?;
+
+// or a PFX archive
+let cred = CertificateCredential::from_pfx(
+    "<tenant-id>", "<client-id>", &std::fs::read("cert.pfx")?, "pfx-password",
+)?;
+```
+
+### Token handling
+
+- Clients wrap the credential in a cache: tokens are kept per scope and renewed about two minutes
+  before they expire. Concurrent requests share one sign-in.
+- Browser and device code credentials keep the refresh token and use it to get tokens for other
+  scopes (for example Graph and then SharePoint) without prompting again. Use **one credential
+  instance per client**: credentials other than `PasswordCredential` are not `Clone`, so a second
+  client built from a second instance signs in again.
+- Passwords, access tokens and refresh tokens are wrapped in `Secret` and print as `[REDACTED]` in
+  `Debug` output. Errors never contain them.
+- All credentials accept `.with_authority(url)` to target a national cloud, for example
+  `https://login.microsoftonline.us`.
+
+### Custom authentication
+
+Implement the trait to plug in anything (managed identity, a token from another library, ...):
+
+```rust
+use async_trait::async_trait;
+use rsp::auth::{AccessToken, TokenCredential};
+use std::time::Duration;
+
+#[derive(Debug)]
+struct MyCredential;
+
+#[async_trait]
+impl TokenCredential for MyCredential {
+    async fn get_token(&self, scope: &str) -> rsp::Result<AccessToken> {
+        Ok(AccessToken::new("<token for scope>", Duration::from_secs(3600)))
+    }
+}
+```
+
+`auth::StaticTokenCredential::new("<token>")` covers the simple case of an already acquired token.
+
+## Using Microsoft Graph
+
+`GraphClient` builds requests by chaining handles; the last call (`get`, `list`, `create`, ...)
+sends them. Collections follow `@odata.nextLink` automatically.
+
+```rust
+use rsp::graph::GraphClient;
+use serde_json::json;
+
+let graph = GraphClient::new(cred);
+
+// Users
+let me = graph.me().get().await?;
+let users = graph.users().filter("startswith(displayName,'A')").top(25).list().await?;
+
+// Sites, lists and items
+let site = graph.sites().by_path("contoso.sharepoint.com", "/sites/team");
+let lists = site.lists().list().await?;
+let items = site.list("Tasks").items().expand("fields").list().await?;
+let new = site.list("Tasks").items().create(&json!({ "Title": "Write docs" })).await?;
+site.list("Tasks").item(&new.id).update(&json!({ "Title": "Docs done" })).await?;
+site.list("Tasks").item(&new.id).delete().await?;
+
+// Files (document libraries and OneDrive)
+let drive = site.drive();                     // or graph.me().drive(), graph.drive("<id>")
+let children = drive.root().children().await?;
+drive.path("Reports/q1.xlsx").upload(std::fs::read("q1.xlsx")?).await?; // > 4 MiB uses an upload session
+let bytes = drive.path("Reports/q1.xlsx").download().await?;
+```
+
+Query options available on collection handles: `select`, `filter`, `expand`, `order_by`, `top`, `search`.
+Use `.pages()` instead of `.list()` to consume a collection page by page.
+
+Client settings:
+
+```rust
+let graph = GraphClient::builder(cred)
+    .base_url("https://graph.microsoft.com/beta") // default: v1.0
+    .max_retries(5)
+    .build();
+```
+
+## Using SharePoint REST
+
+`SharePointClient` is bound to a site URL. Tokens are requested for the tenant host, requests use
+the `application/json;odata=nometadata` format, and the form digest needed for writes is fetched
+and cached for you.
+
+```rust
+use rsp::sharepoint::SharePointClient;
+use serde_json::json;
+
+let sp = SharePointClient::new("https://contoso.sharepoint.com/sites/team", cred)?;
+
+let web = sp.web().get().await?;
+let subwebs = sp.web().subwebs().await?;
+let lists = sp.lists().select(["Id", "Title", "ItemCount"]).list().await?;
+
+// List items
+let tasks = sp.list_by_title("Tasks");
+let open = tasks.items().filter("Status eq 'Open'").select(["Id", "Title"]).top(50).list().await?;
+let created = tasks.items().create(&json!({ "Title": "New task" })).await?;
+tasks.item(created.id).update(&json!({ "Title": "Renamed" })).await?;
+tasks.item(created.id).delete().await?;
+
+// Folders and files, addressed by server-relative URL
+let folder = sp.folder("/sites/team/Shared Documents/Reports");
+let files = folder.files().await?;
+folder.upload("hello.txt", "hello", true).await?;          // overwrite = true
+let data = sp.file("/sites/team/Shared Documents/Reports/hello.txt").download().await?;
+```
+
+Tips:
+
+- When you use `select`, include `Id` if you need it. Missing ids are returned as empty/0 rather
+  than failing.
+- List item columns other than `Id` are in `ListItem::fields` (a JSON map), keyed by internal name.
+- Names containing spaces, quotes or `#` are escaped for you.
+- Updates and deletes are sent as `POST` with `X-HTTP-Method: MERGE|DELETE` and `IF-MATCH: *`.
+
+## Calling endpoints that have no typed API
+
+Both clients expose `request(method, path)`. It takes a path relative to the client's base URL
+(`/me/messages`, `/web/currentuser`) or an absolute URL on the **same host**, and returns a builder
+with `query`, `options`, `header`, `json`, `body`, `send`, `send_json` and `pager`.
+Authentication, throttling retries and error mapping all apply.
+
+```rust
+use reqwest::Method;
+
+// Typed response
+let recent: serde_json::Value = graph
+    .request(Method::GET, "/me/messages")
+    .query("$top", "5")
+    .send_json()
+    .await?;
+
+// Send mail
+graph.request(Method::POST, "/me/sendMail")
+    .json(&serde_json::json!({
+        "message": {
+            "subject": "Hi",
+            "body": { "contentType": "Text", "content": "Hello" },
+            "toRecipients": [{ "emailAddress": { "address": "a@contoso.com" } }]
+        }
+    }))
+    .send()
+    .await?;
+
+// Any paged collection
+#[derive(serde::Deserialize)]
+struct Group { id: String }
+let groups: Vec<Group> = graph.request(Method::GET, "/groups").pager()?.collect_all().await?;
+
+// SharePoint
+let user: serde_json::Value = sp.request(Method::GET, "/web/currentuser").send_json().await?;
+```
+
+For writes to SharePoint through the generic builder, send an `X-RequestDigest` header yourself
+(`POST /contextinfo` returns the value). The typed write methods do this automatically.
+
+## Errors, retries and paging
+
+All fallible calls return `rsp::Result<T>`. `rsp::Error` is `#[non_exhaustive]`:
+
+| Variant       | Meaning                                                                          |
+| ------------- | -------------------------------------------------------------------------------- |
+| `Auth`        | The identity platform refused a token (`code` such as `invalid_grant`, message). |
+| `Config`      | Bad local input: certificate, URL, or a request aimed at a foreign host.         |
+| `Http`        | Non-2xx service response: `status`, service `code`, `message`, `request_id`.     |
+| `Transport`   | Network or TLS failure.                                                          |
+| `Deserialize` | The body did not match the expected type.                                        |
+| `Io`          | Local I/O, for example the loopback listener of the browser flow.                |
+
+```rust
+match graph.me().get().await {
+    Ok(me) => println!("{:?}", me.display_name),
+    Err(rsp::Error::Http { status: 403, code, .. }) => eprintln!("missing permission: {code:?}"),
+    Err(e) => eprintln!("failed: {e}"),
+}
+```
+
+- **Throttling**: 429, 503 and 504 responses are retried up to 3 times (configurable), waiting for
+  `Retry-After` when present, 1 second otherwise. After that the last error is returned.
+- **Paging**: `list()` collects every page; `pages()` / `pager()` return a `Pager` with
+  `next_page()` and `collect_all()`. Graph, SharePoint light and verbose continuation links work.
+- **Credential safety**: the bearer token is only ever sent to the client's own host. A request or
+  continuation link pointing elsewhere fails with `Error::Config`. The only deliberate exception is
+  the pre-authorized upload URL of large Graph uploads, which is called without a token.
+
+## Cargo features
+
+All features are enabled by default.
+
+| Feature            | Enables                                           |
+| ------------------ | ------------------------------------------------- |
+| `graph`            | `rsp::graph`                                      |
+| `sharepoint`       | `rsp::sharepoint`                                 |
+| `auth-password`    | `PasswordCredential`                              |
+| `auth-device-code` | `DeviceCodeCredential`                            |
+| `auth-browser`     | `BrowserCredential` (adds the `open` crate)       |
+| `auth-certificate` | `CertificateCredential` (adds JWT and PFX crates) |
+
+```toml
+rsp = { git = "...", default-features = false, features = ["sharepoint", "auth-certificate"] }
+```
