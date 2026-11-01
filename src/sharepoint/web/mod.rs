@@ -124,6 +124,12 @@ impl WebRequest {
             .json()
     }
 
+    /// The recycle bin of the site collection this web belongs to.
+    pub fn site_recycle_bin(&self) -> RecycleBinRequest {
+        let root = self.base.strip_suffix("/web").unwrap_or_default();
+        RecycleBinRequest::new(self.inner.clone(), format!("{root}/site/recyclebin"))
+    }
+
     /// The root folder of the web.
     pub async fn root_folder(&self) -> Result<FolderInfo> {
         self.get_at("/rootfolder").await
@@ -590,6 +596,74 @@ mod tests {
         bin.item("a").restore().await.unwrap();
         bin.item("a").delete().await.unwrap();
         bin.empty().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn site_bin_stages_and_bulk_actions() {
+        let (c, s) = client().await;
+        mount_digest(&s, 1).await;
+        Mock::given(path("/_api/site/recyclebin"))
+            .and(query_param("$filter", "ItemState eq 2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                json!({"value":[{"Id":"a","ItemState":2,"ItemType":1,"AuthorName":"x","DeletedByName":"y"}]}),
+            ))
+            .expect(1)
+            .mount(&s)
+            .await;
+        mock_write(
+            &s,
+            "/_api/site/recyclebin/restoreByIds",
+            None,
+            None,
+            json!(null),
+        )
+        .await;
+        mock_write(
+            &s,
+            "/_api/site/recyclebin/deleteByIds",
+            None,
+            None,
+            json!(null),
+        )
+        .await;
+        mock_write(
+            &s,
+            "/_api/site/recyclebin('a')/movetosecondstage",
+            None,
+            None,
+            json!(null),
+        )
+        .await;
+        let bin = c.web().site_recycle_bin();
+        let items = bin.clone().second_stage().list().await.unwrap();
+        assert_eq!(items[0].item_state, Some(2));
+        assert_eq!(items[0].deleted_by_name.as_deref(), Some("y"));
+        bin.restore_many(&["a", "b", "c"]).await.unwrap();
+        bin.delete_many(&["a"]).await.unwrap();
+        bin.move_many_to_second_stage(&["a"]).await.unwrap();
+        bin.restore_many(&[]).await.unwrap();
+        let bodies: Vec<_> = s
+            .received_requests()
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.url.path().ends_with("restoreByIds"))
+            .collect();
+        assert_eq!(bodies.len(), 1);
+        let v: serde_json::Value = serde_json::from_slice(&bodies[0].body).unwrap();
+        assert_eq!(v["ids"], json!(["a", "b", "c"]));
+    }
+
+    #[tokio::test]
+    async fn recycle_bin_item_error_is_reported() {
+        let (c, s) = client().await;
+        mount_digest(&s, 1).await;
+        Mock::given(method("POST"))
+            .and(path("/_api/web/recyclebin('x')/restore"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&s)
+            .await;
+        assert!(c.web().recycle_bin().item("x").restore().await.is_err());
     }
 
     #[tokio::test]

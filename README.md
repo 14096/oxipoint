@@ -1,5 +1,8 @@
 # rsp
 
+> **Work in progress.**  
+> This project is not production ready.
+
 A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
 
 - Four sign-in methods: username/password, certificate, interactive browser, device code.
@@ -344,6 +347,8 @@ let groups = sp.web().groups().by_id(5).users().list().await?;
 sp.web().features().activate("<feature-guid>").await?;
 let settings = sp.web().expand("TimeZone").regional_settings().await?;
 let bin = sp.web().recycle_bin().list().await?;
+let second = sp.web().site_recycle_bin().second_stage().list().await?;   // site collection bin, stage 2
+sp.web().site_recycle_bin().restore_many(&["<guid-1>", "<guid-2>"]).await?;
 
 // Modern pages: list, read with canvas content, create, update, publish, delete
 let pages = sp.web().pages();

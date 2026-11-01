@@ -1,8 +1,16 @@
 [package]
 name = "rsp"
-version = "0.0.1-beta4"
+version = "0.0.1-beta5"
 edition = "2024"
 license = "MIT"
+description = "A fluent, type-safe Rust SDK for SharePoint REST and Microsoft Graph"
+readme = "README.md"
+repository = "https://github.com/14096/rsp"
+homepage = "https://github.com/14096/rsp"
+documentation = "https://docs.rs/rsp"
+keywords = ["sharepoint", "microsoft-graph", "microsoft365", "sdk"]
+categories = ["api-bindings", "web-programming::http-client", "authentication"]
+exclude = [".env", ".github/", "Makefile"]
 
 [dependencies]
 async-trait = "0.1.92"

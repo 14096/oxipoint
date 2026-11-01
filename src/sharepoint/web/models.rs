@@ -162,6 +162,18 @@ pub struct RecycleBinItem {
     /// Deletion time (ISO 8601).
     #[serde(default)]
     pub deleted_date: Option<String>,
+    /// Kind of item (1 file, 2 file version, 3 list item, 5 list, 6 folder, 9 attachment).
+    #[serde(default)]
+    pub item_type: Option<i32>,
+    /// Stage the item is in (1 first stage, 2 second stage).
+    #[serde(default)]
+    pub item_state: Option<i32>,
+    /// Name of the author.
+    #[serde(default)]
+    pub author_name: Option<String>,
+    /// Name of the user who deleted the item.
+    #[serde(default)]
+    pub deleted_by_name: Option<String>,
 }
 
 /// A site collection. Use `expand("Usage")` to include usage numbers.

@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.1-beta5] - 2026-11-01
+
+### Added
+
+- **Recycle bin**: site collection bin (`web().site_recycle_bin()`), first and second stage
+  selection, `move_to_second_stage`, bulk `restore_many`, `delete_many` and
+  `move_many_to_second_stage`, and more `RecycleBinItem` metadata (item type, item state, author,
+  deleted by).
+
 ## [0.0.1-beta4] - 2026-10-31
 
 ### Added
