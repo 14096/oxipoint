@@ -4,8 +4,6 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
 ## [0.0.1-beta5] - 2026-11-01
 
 ### Added
@@ -14,6 +12,17 @@ uses [Semantic Versioning](https://semver.org/).
   selection, `move_to_second_stage`, bulk `restore_many`, `delete_many` and
   `move_many_to_second_stage`, and more `RecycleBinItem` metadata (item type, item state, author,
   deleted by).
+
+  ### Fixed
+
+- Bodyless `POST`, `PUT` and `PATCH` requests now send `Content-Length: 0`; SharePoint answered
+  them with HTTP 411.
+- `ListItem` and `Comment` accept `Id`/`ID` (and other case variants) returned together, which
+  failed with "duplicate field" when creating an item.
+- `FileInfo` and `FolderInfo` no longer fail when `$select` leaves out `Name` or
+  `ServerRelativeUrl`, and `FileInfo.length` accepts a number as well as a string.
+- `503` (without `Retry-After`) and `504` are no longer retried for non-idempotent requests, so a
+  create cannot be duplicated; `429` and `503` with `Retry-After` are still retried.
 
 ## [0.0.1-beta4] - 2026-10-31
 

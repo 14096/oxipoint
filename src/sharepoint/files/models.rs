@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::sharepoint::SpUser;
+use crate::sharepoint::{SpUser, inner::flex_opt};
 
 /// A folder.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct FolderInfo {
-    /// Name.
+    /// Name (empty when excluded by `$select`).
+    #[serde(default)]
     pub name: String,
-    /// Server-relative URL.
+    /// Server-relative URL (empty when excluded by `$select`).
+    #[serde(default)]
     pub server_relative_url: String,
     /// Number of children.
     #[serde(default)]
@@ -20,12 +22,14 @@ pub struct FolderInfo {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct FileInfo {
-    /// Name.
+    /// Name (empty when excluded by `$select`).
+    #[serde(default)]
     pub name: String,
-    /// Server-relative URL.
+    /// Server-relative URL (empty when excluded by `$select`).
+    #[serde(default)]
     pub server_relative_url: String,
     /// Size in bytes (SharePoint returns it as a string).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flex_opt")]
     pub length: Option<String>,
     /// Column values of the file's list item (with `$expand=ListItemAllFields`).
     #[serde(default, rename = "ListItemAllFields")]

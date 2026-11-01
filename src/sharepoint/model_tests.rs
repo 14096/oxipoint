@@ -186,3 +186,43 @@ fn new_web_serializes_pascal_case() {
         json!({"Title":"T","Url":"t","WebTemplate":"STS#3","UseSamePermissionsAsParentSite":true})
     );
 }
+
+#[test]
+fn list_item_accepts_both_id_spellings() {
+    let a: ListItem = serde_json::from_value(json!({"Id":3,"ID":3,"Title":"t"})).unwrap();
+    let b: ListItem = serde_json::from_value(json!({"ID":4})).unwrap();
+    let c: ListItem = serde_json::from_value(json!({"Title":"t"})).unwrap();
+    assert_eq!((a.id, b.id, c.id), (3, 4, 0));
+    assert!(!a.fields.contains_key("Id") && !a.fields.contains_key("ID"));
+}
+
+#[test]
+fn comment_accepts_both_spellings_and_numeric_id() {
+    let a: Comment =
+        serde_json::from_value(json!({"id":"1","Id":"1","text":"t","Text":"t","createdDate":"d"}))
+            .unwrap();
+    assert_eq!((a.id.as_str(), a.text.as_deref()), ("1", Some("t")));
+    let b: Comment = serde_json::from_value(json!({"Id":7,"Text":"x"})).unwrap();
+    assert_eq!((b.id.as_str(), b.text.as_deref()), ("7", Some("x")));
+}
+
+#[test]
+fn file_and_folder_tolerate_select_and_numeric_length() {
+    let f: FileInfo = serde_json::from_value(json!({"Length":"12"})).unwrap();
+    let g: FileInfo = serde_json::from_value(json!({"Length":12})).unwrap();
+    assert_eq!((f.length, g.length), (Some("12".into()), Some("12".into())));
+    assert_eq!(f.name, "");
+    let d: FolderInfo = serde_json::from_value(json!({"ItemCount":2})).unwrap();
+    assert_eq!(d.server_relative_url, "");
+}
+
+#[test]
+fn real_shaped_item_create_response_parses() {
+    let i: ListItem = serde_json::from_value(json!({
+        "Id": 5, "ID": 5, "Title": "Item 5", "Notes": "n", "Quantity": 7, "Active": true,
+        "FileSystemObjectType": 0, "ServerRedirectedEmbedUri": null
+    }))
+    .unwrap();
+    assert_eq!(i.id, 5);
+    assert_eq!(i.text("Title").as_deref(), Some("Item 5"));
+}

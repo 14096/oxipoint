@@ -130,6 +130,9 @@ impl Transport {
                 rb = rb.header(k, v);
             }
             rb = match &req.body {
+                Body::None if matches!(req.method.as_str(), "POST" | "PUT" | "PATCH") => {
+                    rb.header(reqwest::header::CONTENT_LENGTH, 0)
+                }
                 Body::None => rb,
                 Body::Json(v) => rb.json(v),
                 Body::Bytes(b) => rb.body(b.clone()),
@@ -141,7 +144,13 @@ impl Transport {
             }
             let headers = resp.headers().clone();
             let body = resp.bytes().await?;
-            let retryable = matches!(status.as_u16(), 429 | 503 | 504);
+            let idempotent = matches!(req.method.as_str(), "GET" | "HEAD" | "OPTIONS");
+            let retryable = match status.as_u16() {
+                429 => true,
+                503 => idempotent || headers.contains_key(reqwest::header::RETRY_AFTER),
+                504 => idempotent,
+                _ => false,
+            };
             if retryable && attempt < self.config.max_retries {
                 attempt += 1;
                 tokio::time::sleep(retry_delay(&headers, self.config.default_retry_delay)).await;
@@ -344,6 +353,57 @@ mod tests {
             .unwrap_err();
         assert_eq!(e.status(), Some(503));
         assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn post_is_not_retried_after_a_gateway_timeout() {
+        let server = MockServer::start().await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(504))
+            .mount(&server)
+            .await;
+        let e = transport(&server.uri(), 2)
+            .send(&RawRequest::new(Method::POST, "/r"))
+            .await
+            .unwrap_err();
+        assert_eq!(e.status(), Some(504));
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn throttled_post_with_retry_after_is_retried() {
+        let server = MockServer::start().await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(503).insert_header("Retry-After", "0"))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let r = transport(&server.uri(), 2)
+            .send(&RawRequest::new(Method::POST, "/r"))
+            .await
+            .unwrap();
+        assert_eq!(r.status, 200);
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn bodyless_writes_send_content_length_zero() {
+        let server = MockServer::start().await;
+        Mock::given(path("/r"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let t = transport(&server.uri(), 0);
+        for m in [Method::POST, Method::PUT, Method::PATCH] {
+            t.send(&RawRequest::new(m, "/r")).await.unwrap();
+        }
+        for r in server.received_requests().await.unwrap() {
+            assert_eq!(r.headers.get("content-length").unwrap(), "0");
+        }
     }
 
     #[tokio::test]

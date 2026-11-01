@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::sharepoint::{
-    SpUser,
-    inner::{flex_opt, flex_string},
-};
+use crate::sharepoint::{SpUser, inner::flex_opt};
 
 /// A list or document library.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -241,21 +238,47 @@ pub struct ValidateOptions {
 }
 
 /// A comment on a list item.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Comment {
     /// Comment id.
-    #[serde(default, alias = "Id", deserialize_with = "flex_string")]
     pub id: String,
     /// Text.
-    #[serde(default, alias = "Text")]
     pub text: Option<String>,
     /// Creation time (ISO 8601).
-    #[serde(default, alias = "CreatedDate")]
     pub created_date: Option<String>,
     /// Author.
-    #[serde(default, alias = "Author")]
     pub author: Option<SpUser>,
+}
+
+impl<'de> Deserialize<'de> for Comment {
+    /// Accepts camelCase and PascalCase names, even when a response has both.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let mut m = Map::deserialize(d)?;
+        let mut take = |lower: &str, upper: &str| {
+            let a = m.remove(lower);
+            let b = m.remove(upper);
+            a.filter(|v| !v.is_null()).or(b).filter(|v| !v.is_null())
+        };
+        let id = match take("id", "Id") {
+            Some(Value::String(s)) => s,
+            Some(Value::Number(n)) => n.to_string(),
+            _ => String::new(),
+        };
+        let text = take("text", "Text").and_then(|v| v.as_str().map(str::to_owned));
+        let created_date =
+            take("createdDate", "CreatedDate").and_then(|v| v.as_str().map(str::to_owned));
+        let author = match take("author", "Author") {
+            Some(v) => Some(serde_json::from_value(v).map_err(serde::de::Error::custom)?),
+            None => None,
+        };
+        Ok(Self {
+            id,
+            text,
+            created_date,
+            author,
+        })
+    }
 }
 
 /// A file attached to a list item.
@@ -289,14 +312,30 @@ pub struct ItemVersion {
 }
 
 /// A list item; columns other than `Id` are available in `fields`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct ListItem {
     /// Item id (0 when excluded by `$select`).
-    #[serde(rename = "Id", alias = "ID", default)]
+    #[serde(rename = "Id")]
     pub id: i64,
     /// All other returned columns.
     #[serde(flatten)]
     pub fields: Map<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for ListItem {
+    /// Accepts `Id` and `ID`, which SharePoint may return together.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let mut fields = Map::deserialize(d)?;
+        let upper = fields.remove("ID");
+        let id = fields.remove("Id").or(upper);
+        let id = match id {
+            None | Some(Value::Null) => 0,
+            Some(v) => v
+                .as_i64()
+                .ok_or_else(|| serde::de::Error::custom("item id is not an integer"))?,
+        };
+        Ok(Self { id, fields })
+    }
 }
 
 crate::fields::item_readers!(ListItem, s => Some(&s.fields));
