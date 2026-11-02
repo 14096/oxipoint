@@ -10,9 +10,9 @@
 //!
 //! # Example
 //! ```no_run
-//! # async fn run() -> rsp::Result<()> {
-//! use rsp::auth::PasswordCredential;
-//! use rsp::graph::GraphClient;
+//! # async fn run() -> oxipoint::Result<()> {
+//! use oxipoint::auth::PasswordCredential;
+//! use oxipoint::graph::GraphClient;
 //!
 //! let cred = PasswordCredential::new("tenant-id", "client-id", "user@contoso.com", "secret");
 //! let graph = GraphClient::new(cred);

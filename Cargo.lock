@@ -1164,6 +1164,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
+name = "oxipoint"
+version = "0.0.1-beta6"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "bytes",
+ "jsonwebtoken",
+ "open",
+ "p12-keystore",
+ "percent-encoding",
+ "rand",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "p12-keystore"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1504,28 +1526,6 @@ dependencies = [
  "libc",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rsp"
-version = "0.0.1-beta5"
-dependencies = [
- "async-trait",
- "base64 0.23.1",
- "bytes",
- "jsonwebtoken",
- "open",
- "p12-keystore",
- "percent-encoding",
- "rand",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "tokio",
- "url",
- "wiremock",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 //! Typed, fluent client for the SharePoint REST API (`/_api`).
 //!
 //! ```no_run
-//! # async fn run(cred: rsp::auth::StaticTokenCredential) -> rsp::Result<()> {
-//! use rsp::sharepoint::SharePointClient;
+//! # async fn run(cred: oxipoint::auth::StaticTokenCredential) -> oxipoint::Result<()> {
+//! use oxipoint::sharepoint::SharePointClient;
 //! let sp = SharePointClient::new("https://contoso.sharepoint.com/sites/team", cred)?;
 //! let web = sp.web().get().await?;
 //! let items = sp.list_by_title("Tasks").items().filter("Status eq 'Open'").top(50).list().await?;
@@ -140,9 +140,9 @@ use crate::{
 ///
 /// # Files, search and batching
 /// ```no_run
-/// # async fn run(sp: rsp::sharepoint::SharePointClient) -> rsp::Result<()> {
+/// # async fn run(sp: oxipoint::sharepoint::SharePointClient) -> oxipoint::Result<()> {
 /// use reqwest::Method;
-/// use rsp::sharepoint::{CheckInKind, SharePointBatchRequest};
+/// use oxipoint::sharepoint::{CheckInKind, SharePointBatchRequest};
 ///
 /// let file = sp.file("/sites/team/Shared Documents/plan.docx");
 /// file.checkout().await?;

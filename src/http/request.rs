@@ -150,7 +150,7 @@ impl RequestBuilder {
     /// The body is written as it arrives, so large files are never held in memory.
     ///
     /// ```no_run
-    /// # async fn run(graph: rsp::graph::GraphClient) -> rsp::Result<()> {
+    /// # async fn run(graph: oxipoint::graph::GraphClient) -> oxipoint::Result<()> {
     /// use reqwest::Method;
     ///
     /// // `tokio::fs` needs tokio's `fs` feature in your own crate.

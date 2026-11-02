@@ -1,8 +1,8 @@
 //! Typed, fluent client for the most common Microsoft Graph resources.
 //!
 //! ```no_run
-//! # async fn run(cred: rsp::auth::StaticTokenCredential) -> rsp::Result<()> {
-//! use rsp::graph::GraphClient;
+//! # async fn run(cred: oxipoint::auth::StaticTokenCredential) -> oxipoint::Result<()> {
+//! use oxipoint::graph::GraphClient;
 //! let graph = GraphClient::new(cred);
 //! let lists = graph.sites().by_path("contoso.sharepoint.com", "/sites/team").lists().list().await?;
 //! let items = graph.sites().root().list("list-id").items().expand("fields").top(10).list().await?;
@@ -63,9 +63,9 @@ const SCOPE: &str = "https://graph.microsoft.com/.default";
 ///
 /// # Files, sharing, search and batching
 /// ```no_run
-/// # async fn run(graph: rsp::graph::GraphClient) -> rsp::Result<()> {
+/// # async fn run(graph: oxipoint::graph::GraphClient) -> oxipoint::Result<()> {
 /// use reqwest::Method;
-/// use rsp::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
+/// use oxipoint::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
 /// use std::time::Duration;
 ///
 /// let drive = graph.drive("<drive-id>");

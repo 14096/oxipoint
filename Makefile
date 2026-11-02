@@ -36,7 +36,7 @@ features: ## Check main feature combinations
 	cargo check --lib --no-default-features --features graph,auth-password
 	cargo check --lib --no-default-features --features sharepoint,auth-device-code,auth-browser,auth-certificate
 
-run: ## Run the demo CLI (browser login); reads .env / RSP_* env vars or ARGS="<site-url> --client-id ID"
+run: ## Run the demo CLI (browser login); reads .env / OXIPOINT_* env vars or ARGS="<site-url> --client-id ID"
 	cargo run -- $(ARGS)
 
 run-device: ## Run the demo CLI with device code login

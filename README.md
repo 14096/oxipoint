@@ -1,4 +1,4 @@
-# rsp
+# oxipoint
 
 > **Work in progress.**  
 > This project is not production ready.
@@ -11,15 +11,15 @@ A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
   (typed column values, validated writes, likes, comments, delta and change tracking), modern
   pages (Graph and SharePoint REST), files and folders (copy, move, versions, streaming), search,
   sharing links, batching and users.
-- Typed column values (`rsp::fields`) that serialize for either SharePoint or Graph.
+- Typed column values (`oxipoint::fields`) that serialize for either SharePoint or Graph.
 - A generic request builder for everything else, with the same authentication, retry and error handling.
 - Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
 
 ```rust
-use rsp::{auth::DeviceCodeCredential, graph::GraphClient};
+use oxipoint::{auth::DeviceCodeCredential, graph::GraphClient};
 
 #[tokio::main]
-async fn main() -> rsp::Result<()> {
+async fn main() -> oxipoint::Result<()> {
     let cred = DeviceCodeCredential::new("contoso.onmicrosoft.com", "<client-id>", |info| {
         println!("{}", info.message);
     });
@@ -89,7 +89,7 @@ the code with PKCE. The `state` value is verified, and the wait times out after 
 
 ```rust
 use std::time::Duration;
-use rsp::auth::BrowserCredential;
+use oxipoint::auth::BrowserCredential;
 
 let cred = BrowserCredential::new("contoso.onmicrosoft.com", "<client-id>")
     .with_port(8400)                     // optional: fixed port (default: random free port)
@@ -102,7 +102,7 @@ Prints a code the user enters at `https://microsoft.com/devicelogin` on any devi
 receives `DeviceCodeInfo` (`user_code`, `verification_uri`, `message`, ...); show it however you like.
 
 ```rust
-use rsp::auth::DeviceCodeCredential;
+use oxipoint::auth::DeviceCodeCredential;
 
 let cred = DeviceCodeCredential::new("contoso.onmicrosoft.com", "<client-id>", |info| {
     println!("{}", info.message);
@@ -112,7 +112,7 @@ let cred = DeviceCodeCredential::new("contoso.onmicrosoft.com", "<client-id>", |
 ### Username and password
 
 ```rust
-use rsp::auth::PasswordCredential;
+use oxipoint::auth::PasswordCredential;
 
 let cred = PasswordCredential::new(
     "contoso.onmicrosoft.com",
@@ -128,7 +128,7 @@ Needs the certificate and its RSA private key, either as PEM or as a PFX (PKCS#1
 material is reported as `Error::Config` before any network call.
 
 ```rust
-use rsp::auth::CertificateCredential;
+use oxipoint::auth::CertificateCredential;
 
 // PEM certificate + PKCS#8/PKCS#1 private key
 let cred = CertificateCredential::from_pem(
@@ -162,7 +162,7 @@ Implement the trait to plug in anything (managed identity, a token from another 
 
 ```rust
 use async_trait::async_trait;
-use rsp::auth::{AccessToken, TokenCredential};
+use oxipoint::auth::{AccessToken, TokenCredential};
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -170,7 +170,7 @@ struct MyCredential;
 
 #[async_trait]
 impl TokenCredential for MyCredential {
-    async fn get_token(&self, scope: &str) -> rsp::Result<AccessToken> {
+    async fn get_token(&self, scope: &str) -> oxipoint::Result<AccessToken> {
         Ok(AccessToken::new("<token for scope>", Duration::from_secs(3600)))
     }
 }
@@ -184,7 +184,7 @@ impl TokenCredential for MyCredential {
 sends them. Collections follow `@odata.nextLink` automatically.
 
 ```rust
-use rsp::graph::{GraphClient, NewSitePage, NewSubscription};
+use oxipoint::graph::{GraphClient, NewSitePage, NewSubscription};
 use serde_json::json;
 
 let graph = GraphClient::new(cred);
@@ -247,11 +247,11 @@ Graph lacks, such as navigation, features, regional settings and the recycle bin
 
 ### Typed column values
 
-`rsp::fields::Fields` builds column values once and serializes them for either back end, so you
+`oxipoint::fields::Fields` builds column values once and serializes them for either back end, so you
 do not hand-write lookup or person JSON:
 
 ```rust
-use rsp::fields::Fields;
+use oxipoint::fields::Fields;
 
 let f = Fields::new()
     .text("Title", "Write docs")
@@ -265,7 +265,7 @@ sp.list_by_title("Tasks").items().create(&f.for_sharepoint()).await?;
 // Reading: every reader returns None for a missing column or another kind
 let item = sp.list_by_title("Tasks").item(7).get().await?;
 let project = item.lookup("Project");          // Some(Lookup { id: 3, .. })
-let due = item.datetime("Due");                // parsed ISO 8601 (rsp::fields::DateTime)
+let due = item.datetime("Due");                // parsed ISO 8601 (oxipoint::fields::DateTime)
 ```
 
 Managed metadata has a SharePoint form for a single term only (`taxonomy`) and none on Graph.
@@ -274,7 +274,7 @@ Unsupported combinations fail before anything is sent.
 SharePoint also validates writes per column and reads formatted values:
 
 ```rust
-use rsp::sharepoint::ValidateOptions;
+use oxipoint::sharepoint::ValidateOptions;
 let results = sp.list_by_title("Tasks").item(7)
     .validate_update(&Fields::new().text("Title", "x"), &ValidateOptions::default()).await?;
 let rejected: Vec<_> = results.iter().filter(|r| !r.is_ok()).collect();
@@ -319,7 +319,7 @@ the `application/json;odata=nometadata` format, and the form digest needed for w
 and cached for you.
 
 ```rust
-use rsp::sharepoint::{
+use oxipoint::sharepoint::{
     ChangeQuery, ListTemplate, NewList, NewSitePage, NewSubscription, NewWeb, PermissionKind,
     SharePointClient,
 };
@@ -408,7 +408,7 @@ The core of these examples is compiled as a doctest on `GraphClient` and `ShareP
 
 ```rust
 use reqwest::Method;
-use rsp::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
+use oxipoint::graph::{DriveItemUpdate, GraphBatchRequest, LinkOptions, LinkScope, LinkType};
 use std::time::Duration;
 
 let drive = graph.drive("<drive-id>");
@@ -446,7 +446,7 @@ for result in batch.send().await? {
 SharePoint REST has the equivalent file operations, plus check-out and publishing:
 
 ```rust
-use rsp::sharepoint::{CheckInKind, SharePointBatchRequest};
+use oxipoint::sharepoint::{CheckInKind, SharePointBatchRequest};
 
 let file = sp.file("/sites/team/Shared Documents/plan.docx");
 file.checkout().await?;
@@ -545,7 +545,7 @@ For writes to SharePoint through the generic builder, send an `X-RequestDigest` 
 
 ## Errors, retries and paging
 
-All fallible calls return `rsp::Result<T>`. `rsp::Error` is `#[non_exhaustive]`:
+All fallible calls return `oxipoint::Result<T>`. `oxipoint::Error` is `#[non_exhaustive]`:
 
 | Variant       | Meaning                                                                                                                                        |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -559,7 +559,7 @@ All fallible calls return `rsp::Result<T>`. `rsp::Error` is `#[non_exhaustive]`:
 ```rust
 match graph.me().get().await {
     Ok(me) => println!("{:?}", me.display_name),
-    Err(rsp::Error::Http { status: 403, code, .. }) => eprintln!("missing permission: {code:?}"),
+    Err(oxipoint::Error::Http { status: 403, code, .. }) => eprintln!("missing permission: {code:?}"),
     Err(e) => eprintln!("failed: {e}"),
 }
 ```
@@ -579,13 +579,13 @@ All features are enabled by default.
 
 | Feature            | Enables                                           |
 | ------------------ | ------------------------------------------------- |
-| `graph`            | `rsp::graph`                                      |
-| `sharepoint`       | `rsp::sharepoint`                                 |
+| `graph`            | `oxipoint::graph`                                      |
+| `sharepoint`       | `oxipoint::sharepoint`                                 |
 | `auth-password`    | `PasswordCredential`                              |
 | `auth-device-code` | `DeviceCodeCredential`                            |
 | `auth-browser`     | `BrowserCredential` (adds the `open` crate)       |
 | `auth-certificate` | `CertificateCredential` (adds JWT and PFX crates) |
 
 ```toml
-rsp = { git = "...", default-features = false, features = ["sharepoint", "auth-certificate"] }
+oxipoint = { git = "...", default-features = false, features = ["sharepoint", "auth-certificate"] }
 ```

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.0.1-beta6] - 2026-11-02
+
+### Changed
+
+- Renamed the crate from `rsp` to `oxipoint`.
+
 ## [0.0.1-beta5] - 2026-11-01
 
 ### Added
@@ -13,7 +19,7 @@ uses [Semantic Versioning](https://semver.org/).
   `move_many_to_second_stage`, and more `RecycleBinItem` metadata (item type, item state, author,
   deleted by).
 
-  ### Fixed
+### Fixed
 
 - Bodyless `POST`, `PUT` and `PATCH` requests now send `Content-Length: 0`; SharePoint answered
   them with HTTP 411.
@@ -65,7 +71,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **`rsp::fields`**: typed list item column values (`Fields`, `FieldValue`) that serialize for
+- **`oxipoint::fields`**: typed list item column values (`Fields`, `FieldValue`) that serialize for
   SharePoint (`for_sharepoint()`) or Graph (`for_graph()`), typed readers (`text`, `number`,
   `bool`, `datetime`, `url`, `lookup`, `person`, `taxonomy`) on both `ListItem` types, and a
   dependency-free ISO 8601 `DateTime`. Unsupported kind and back-end pairs fail before sending.

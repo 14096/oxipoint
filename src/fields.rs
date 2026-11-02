@@ -5,7 +5,7 @@
 //! passed wherever a serializable set of column values is accepted.
 //!
 //! ```
-//! use rsp::fields::Fields;
+//! use oxipoint::fields::Fields;
 //! let f = Fields::new().text("Title", "Write docs").lookup("Project", 3);
 //! let sp = serde_json::to_value(f.for_sharepoint()).unwrap();
 //! let graph = serde_json::to_value(f.for_graph()).unwrap();

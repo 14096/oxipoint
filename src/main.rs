@@ -2,19 +2,19 @@
 //! shown in the default view, and adds 10 random items.
 //!
 //! ```text
-//! rsp <site-url> --client-id <id> [--tenant <tenant>]
+//! oxipoint <site-url> --client-id <id> [--tenant <tenant>]
 //! ```
 //! Values can also come from the environment or a `.env` file in the working directory
-//! (`RSP_SITE_URL`, `RSP_CLIENT_ID`, `RSP_TENANT`). See `.env.example`.
+//! (`OXIPOINT_SITE_URL`, `OXIPOINT_CLIENT_ID`, `OXIPOINT_TENANT`). See `.env.example`.
 
 use std::{collections::HashMap, env, fs, process::ExitCode};
 
-use reqwest::Method;
-use rsp::{
+use oxipoint::{
     Result,
     auth::DeviceCodeCredential,
     sharepoint::{ListTemplate, NewList, SharePointClient},
 };
+use reqwest::Method;
 use serde_json::json;
 
 const LIST: &str = "TEST";
@@ -57,9 +57,9 @@ fn parse_args() -> std::result::Result<Args, String> {
             .or_else(|| dotenv.get(key).cloned())
             .filter(|v| !v.is_empty())
     };
-    let mut site_url = get("RSP_SITE_URL");
-    let mut client_id = get("RSP_CLIENT_ID");
-    let mut tenant = get("RSP_TENANT");
+    let mut site_url = get("OXIPOINT_SITE_URL");
+    let mut client_id = get("OXIPOINT_CLIENT_ID");
+    let mut tenant = get("OXIPOINT_TENANT");
     let mut it = env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -71,9 +71,10 @@ fn parse_args() -> std::result::Result<Args, String> {
         }
     }
     Ok(Args {
-        site_url: site_url.ok_or("missing <site-url> (or RSP_SITE_URL in the environment/.env)")?,
+        site_url: site_url
+            .ok_or("missing <site-url> (or OXIPOINT_SITE_URL in the environment/.env)")?,
         client_id: client_id
-            .ok_or("missing --client-id (or RSP_CLIENT_ID in the environment/.env)")?,
+            .ok_or("missing --client-id (or OXIPOINT_CLIENT_ID in the environment/.env)")?,
         tenant: tenant.unwrap_or_else(|| "organizations".into()),
     })
 }
@@ -133,7 +134,7 @@ async fn main() -> ExitCode {
             if !msg.is_empty() {
                 eprintln!("error: {msg}\n");
             }
-            eprintln!("usage: rsp <site-url> --client-id <id> [--tenant <tenant>]");
+            eprintln!("usage: oxipoint <site-url> --client-id <id> [--tenant <tenant>]");
             return if msg.is_empty() {
                 ExitCode::SUCCESS
             } else {
