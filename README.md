@@ -564,8 +564,8 @@ match graph.me().get().await {
 }
 ```
 
-- **Throttling**: 429, 503 and 504 responses are retried up to 3 times (configurable), waiting for
-  `Retry-After` when present, 1 second otherwise. After that the last error is returned.
+- **Throttling**: 429 responses (and 503/504 for idempotent requests; a 503 with `Retry-After` always)
+  are retried up to 3 times (configurable), waiting for `Retry-After` when present, 1 second otherwise. After that the last error is returned.
 - **Paging**: `list()` collects every page; `pages()` / `pager()` return a `Pager` with
   `next_page()` and `collect_all()`. Graph, SharePoint light and verbose continuation links work.
 - **Credential safety**: the bearer token is only ever sent to the client's own host. A request or
@@ -579,8 +579,8 @@ All features are enabled by default.
 
 | Feature            | Enables                                           |
 | ------------------ | ------------------------------------------------- |
-| `graph`            | `oxipoint::graph`                                      |
-| `sharepoint`       | `oxipoint::sharepoint`                                 |
+| `graph`            | `oxipoint::graph`                                 |
+| `sharepoint`       | `oxipoint::sharepoint`                            |
 | `auth-password`    | `PasswordCredential`                              |
 | `auth-device-code` | `DeviceCodeCredential`                            |
 | `auth-browser`     | `BrowserCredential` (adds the `open` crate)       |

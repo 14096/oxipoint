@@ -1,0 +1,16 @@
+# Coverage
+
+What the typed API covers today. Anything else is reachable with the
+[generic request builder](../guides/generic-requests.md).
+
+| Entity            | SharePoint REST (`sp`)                                                                                                                        | Microsoft Graph (`graph`)                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin                               | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete)           |
+| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                                                          | create, update, delete, columns, content types, subscriptions (no views or permissions)                        |
+| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments                                        | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter               |
+| Modern pages      | list, read (canvas content), create, update, publish, delete                                                                                  | list, read (canvas layout), create, update, publish, delete, web parts                                         |
+| Files and folders | read, upload, download (also streamed), folders, copy, move, rename, recursive listing, check-out and check-in, publish and approve, versions | drives, upload (resumable), download (also streamed), create folder, rename, move, copy, versions, drive delta |
+| Sharing           | not covered (use the generic builder or Graph)                                                                                                | sharing links, invitations, item permissions, open a sharing URL                                               |
+| Search            | query with select, sort, refiners and paging                                                                                                  | query over drive items, list items and sites, with paging                                                      |
+| Batching          | `$batch` with changesets                                                                                                                      | `$batch` (20 calls, dependencies)                                                                              |
+| Users             | current user, site users, groups, ensure user                                                                                                 | me, users                                                                                                      |

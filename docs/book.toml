@@ -1,0 +1,21 @@
+[book]
+title = "oxipoint"
+description = "A fluent, type-safe Rust SDK for SharePoint REST and Microsoft Graph"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/14096/oxipoint"
+edit-url-template = "https://github.com/14096/oxipoint/edit/main/docs/{path}"
+site-url = "/oxipoint/"
+default-theme = "light"
+preferred-dark-theme = "navy"
+
+[output.html.search]
+enable = true
+
+[output.html.playground]
+runnable = false

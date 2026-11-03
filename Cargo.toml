@@ -10,7 +10,7 @@ homepage = "https://github.com/14096/oxipoint"
 documentation = "https://docs.rs/oxipoint"
 keywords = ["sharepoint", "microsoft-graph", "microsoft365", "sdk"]
 categories = ["api-bindings", "web-programming::http-client", "authentication"]
-exclude = [".env", ".github/", "Makefile"]
+exclude = [".env", ".github/", "docs/", "Makefile"]
 
 [dependencies]
 async-trait = "0.1.92"
