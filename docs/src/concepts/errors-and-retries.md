@@ -16,6 +16,18 @@ All fallible calls return `oxipoint::Result<T>`, an alias for `Result<T, oxipoin
 
 `Error::status()` returns the HTTP status for `Http` errors, and `None` for the rest.
 
+Helpers save you from matching on raw statuses:
+
+| Method              | True when                                                   |
+| ------------------- | ----------------------------------------------------------- |
+| `is_not_found()`    | HTTP 404                                                    |
+| `is_unauthorized()` | HTTP 401, or token acquisition failed (`Error::Auth`)       |
+| `is_forbidden()`    | HTTP 403                                                    |
+| `is_conflict()`     | HTTP 409 or 412 (for example a failed etag guard)           |
+| `is_throttled()`    | HTTP 429 or 503, after the SDK ran out of retries           |
+| `code()`            | returns the service error code of an `Http` or `Auth` error |
+| `request_id()`      | returns the service request id of an `Http` error           |
+
 ## Handling errors
 
 ```rust
@@ -36,7 +48,7 @@ match graph.me().get().await {
 async fn find_list(sp: &SharePointClient, title: &str) -> oxipoint::Result<Option<oxipoint::sharepoint::ListInfo>> {
     match sp.list_by_title(title).get().await {
         Ok(list) => Ok(Some(list)),
-        Err(e) if e.status() == Some(404) => Ok(None),
+        Err(e) if e.is_not_found() => Ok(None),
         Err(e) => Err(e),
     }
 }
@@ -45,7 +57,35 @@ async fn find_list(sp: &SharePointClient, title: &str) -> oxipoint::Result<Optio
 ### Log the request id
 
 `Http` errors carry `request_id`. Include it in logs and in support tickets with Microsoft: it is
-the fastest way for them to trace a failure.
+the fastest way for them to trace a failure. `Error::request_id()` returns it directly.
+
+### Built-in logging
+
+Enable the `tracing` cargo feature (off by default) and the transport emits
+[`tracing`](https://docs.rs/tracing) events:
+
+| Level   | Event                                                                            |
+| ------- | -------------------------------------------------------------------------------- |
+| `debug` | each request attempt: method, host, path, status, attempt number, elapsed ms     |
+| `warn`  | a retry (status, attempt, delay), and a final failure (status, code, request id) |
+
+Query strings, headers and tokens are never logged.
+
+The SDK only emits events; your application decides where they go by installing a subscriber:
+
+```toml
+oxipoint = { version = "0.0.1-beta7", features = ["tracing"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+```
+
+```rust
+tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .init();
+// RUST_LOG=oxipoint=debug cargo run   (output goes to stderr)
+```
+
+Use `tracing-appender` for files, or any other `tracing` subscriber, to send the events elsewhere.
 
 ## Retries and throttling
 

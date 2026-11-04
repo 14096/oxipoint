@@ -301,6 +301,21 @@ Graph items add metadata (`created_by`, `e_tag`, ...), `drive_item()`, `analytic
 | Restore a version                             | `restore_version("2.0")` (label)   | `restore_version("1.0")` (id)       |
 
 Query options available on collection handles: `select`, `filter`, `expand`, `order_by`, `top`, `search`.
+
+Build `$filter` values with `filter!` so strings are quoted and escaped for you (`&&` binds tighter
+than `||`; parentheses group; `(expr)` interpolates a Rust value):
+
+```rust
+use oxipoint::filter;
+
+let name = "O'Brien";
+let open = sp.list_by_title("Tasks").items()
+    .filter(filter!(Status == "Open" && (Priority >= 3 || Urgent == true) && Author == (name)))
+    .list().await?;
+// Status eq 'Open' and (Priority ge 3 or Urgent eq true) and Author eq 'O''Brien'
+```
+
+`oxipoint::filter::Filter` offers the same as a builder (`Filter::eq("Status", "Open").and(..)`).
 Use `.pages()` instead of `.list()` to consume a collection page by page.
 
 Client settings:
@@ -564,6 +579,11 @@ match graph.me().get().await {
 }
 ```
 
+- **Helpers**: `is_not_found()`, `is_unauthorized()`, `is_forbidden()`, `is_conflict()`,
+  `is_throttled()`, `code()` and `request_id()` on `Error`.
+- **Logging**: with the `tracing` feature the transport emits `debug` events per request and `warn`
+  events for retries and failures (never tokens or query strings). Install a `tracing` subscriber
+  to see them, for example `tracing_subscriber::fmt().init()` and `RUST_LOG=oxipoint=debug`.
 - **Throttling**: 429 responses (and 503/504 for idempotent requests; a 503 with `Retry-After` always)
   are retried up to 3 times (configurable), waiting for `Retry-After` when present, 1 second otherwise. After that the last error is returned.
 - **Paging**: `list()` collects every page; `pages()` / `pager()` return a `Pager` with
@@ -575,16 +595,17 @@ match graph.me().get().await {
 
 ## Cargo features
 
-All features are enabled by default.
+All features except `tracing` are enabled by default.
 
-| Feature            | Enables                                           |
-| ------------------ | ------------------------------------------------- |
-| `graph`            | `oxipoint::graph`                                 |
-| `sharepoint`       | `oxipoint::sharepoint`                            |
-| `auth-password`    | `PasswordCredential`                              |
-| `auth-device-code` | `DeviceCodeCredential`                            |
-| `auth-browser`     | `BrowserCredential` (adds the `open` crate)       |
-| `auth-certificate` | `CertificateCredential` (adds JWT and PFX crates) |
+| Feature            | Enables                                            |
+| ------------------ | -------------------------------------------------- |
+| `graph`            | `oxipoint::graph`                                  |
+| `sharepoint`       | `oxipoint::sharepoint`                             |
+| `auth-password`    | `PasswordCredential`                               |
+| `auth-device-code` | `DeviceCodeCredential`                             |
+| `auth-browser`     | `BrowserCredential` (adds the `open` crate)        |
+| `auth-certificate` | `CertificateCredential` (adds JWT and PFX crates)  |
+| `tracing`          | Request, retry and failure events (off by default) |
 
 ```toml
 oxipoint = { git = "...", default-features = false, features = ["sharepoint", "auth-certificate"] }

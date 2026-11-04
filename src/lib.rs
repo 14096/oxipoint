@@ -36,6 +36,7 @@
 pub mod auth;
 mod error;
 pub mod fields;
+pub mod filter;
 pub mod http;
 mod secret;
 

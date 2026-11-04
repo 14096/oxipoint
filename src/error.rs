@@ -56,6 +56,48 @@ impl Error {
             _ => None,
         }
     }
+
+    /// Returns the service error code for [`Error::Http`] and [`Error::Auth`] errors.
+    pub fn code(&self) -> Option<&str> {
+        match self {
+            Error::Http { code, .. } | Error::Auth { code, .. } => code.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Returns the request id reported by the service, to quote when contacting support.
+    pub fn request_id(&self) -> Option<&str> {
+        match self {
+            Error::Http { request_id, .. } => request_id.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Whether the service answered `404 Not Found`.
+    pub fn is_not_found(&self) -> bool {
+        self.status() == Some(404)
+    }
+
+    /// Whether the service answered `401 Unauthorized`, or token acquisition failed.
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, Error::Auth { .. }) || self.status() == Some(401)
+    }
+
+    /// Whether the service answered `403 Forbidden`.
+    pub fn is_forbidden(&self) -> bool {
+        self.status() == Some(403)
+    }
+
+    /// Whether the service answered `409 Conflict` or `412 Precondition Failed`.
+    pub fn is_conflict(&self) -> bool {
+        matches!(self.status(), Some(409 | 412))
+    }
+
+    /// Whether the request was throttled (`429`), or the service was unavailable (`503`) after
+    /// the SDK ran out of retries.
+    pub fn is_throttled(&self) -> bool {
+        matches!(self.status(), Some(429 | 503))
+    }
 }
 
 #[cfg(test)]
@@ -74,5 +116,23 @@ mod tests {
         };
         assert_eq!(e.to_string(), "HTTP 404: nope");
         assert_eq!(e.status(), Some(404));
+        assert!(e.is_not_found() && !e.is_throttled());
+    }
+
+    #[test]
+    fn classifiers_and_accessors() {
+        let http = |status| Error::Http {
+            status,
+            code: Some("c".into()),
+            message: String::new(),
+            request_id: Some("r".into()),
+        };
+        assert!(http(429).is_throttled() && http(503).is_throttled());
+        assert!(http(401).is_unauthorized() && http(403).is_forbidden());
+        assert!(http(409).is_conflict() && http(412).is_conflict());
+        assert_eq!(http(500).code(), Some("c"));
+        assert_eq!(http(500).request_id(), Some("r"));
+        assert!(Error::auth(None, "x").is_unauthorized());
+        assert_eq!(Error::Config("x".into()).code(), None);
     }
 }

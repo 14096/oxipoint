@@ -137,8 +137,20 @@ impl Transport {
                 Body::Json(v) => rb.json(v),
                 Body::Bytes(b) => rb.body(b.clone()),
             };
+            #[cfg(feature = "tracing")]
+            let started = std::time::Instant::now();
             let resp = rb.send().await?;
             let status = resp.status();
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                method = %req.method,
+                host = url.host_str().unwrap_or(""),
+                path = url.path(),
+                status = status.as_u16(),
+                attempt,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "oxipoint request"
+            );
             if status.is_success() {
                 return Ok(resp);
             }
@@ -153,10 +165,27 @@ impl Transport {
             };
             if retryable && attempt < self.config.max_retries {
                 attempt += 1;
-                tokio::time::sleep(retry_delay(&headers, self.config.default_retry_delay)).await;
+                let delay = retry_delay(&headers, self.config.default_retry_delay);
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    status = status.as_u16(),
+                    attempt,
+                    max_retries = self.config.max_retries,
+                    delay_ms = delay.as_millis() as u64,
+                    "oxipoint retrying request"
+                );
+                tokio::time::sleep(delay).await;
                 continue;
             }
-            return Err(parse_service_error(status.as_u16(), &headers, &body));
+            let err = parse_service_error(status.as_u16(), &headers, &body);
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                status = status.as_u16(),
+                code = err.code().unwrap_or(""),
+                request_id = err.request_id().unwrap_or(""),
+                "oxipoint request failed"
+            );
+            return Err(err);
         }
     }
 }

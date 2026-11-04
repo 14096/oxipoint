@@ -11,14 +11,14 @@ cargo doc --no-deps --open
 
 Useful entry points:
 
-| Module                | Contents                                                            |
-| --------------------- | ------------------------------------------------------------------- |
-| `oxipoint::auth`      | Credentials and the `TokenCredential` trait                         |
-| `oxipoint::graph`     | `GraphClient` and its handles and models                            |
-| `oxipoint::sharepoint`| `SharePointClient` and its handles and models                       |
-| `oxipoint::fields`    | `Fields`, `FieldValue` and typed readers                            |
-| `oxipoint::http`      | `RequestBuilder`, `Pager`, `QueryOptions`, `TransportConfig`        |
-| `oxipoint::Error`     | The error type                                                      |
+| Module                 | Contents                                                     |
+| ---------------------- | ------------------------------------------------------------ |
+| `oxipoint::auth`       | Credentials and the `TokenCredential` trait                  |
+| `oxipoint::graph`      | `GraphClient` and its handles and models                     |
+| `oxipoint::sharepoint` | `SharePointClient` and its handles and models                |
+| `oxipoint::fields`     | `Fields`, `FieldValue` and typed readers                     |
+| `oxipoint::http`       | `RequestBuilder`, `Pager`, `QueryOptions`, `TransportConfig` |
+| `oxipoint::Error`      | The error type                                               |
 
 ## Changelog
 

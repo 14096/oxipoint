@@ -12,7 +12,7 @@ Add oxipoint from [crates.io](https://crates.io/crates/oxipoint). The current re
 
 ```toml
 [dependencies]
-oxipoint = { version = "0.0.1-beta6" }
+oxipoint = { version = "0.0.1-beta7" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
 serde_json = "1"   # handy for building request bodies with json!
 reqwest = "0.13"   # only needed to name `reqwest::Method` for generic requests
@@ -24,7 +24,7 @@ Everything is enabled by default. A service that only talks to SharePoint with a
 avoid pulling in the browser and other dependencies:
 
 ```toml
-oxipoint = { version = "0.0.1-beta6", default-features = false, features = ["sharepoint", "auth-certificate"] }
+oxipoint = { version = "0.0.1-beta7", default-features = false, features = ["sharepoint", "auth-certificate"] }
 ```
 
 See [Cargo features](../reference/features.md) for the full list.

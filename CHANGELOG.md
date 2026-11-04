@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.0.1-beta7] - 2026-11-04
+
+### Added
+
+- **`filter!` macro and `Filter` builder** (`oxipoint::filter`): build OData `$filter`
+  expressions with Rust-like syntax; string values are quoted and escaped, `&&` binds tighter
+  than `||`, and parentheses group. Results can be passed to any `filter` method.
+- **Error helpers**: `Error::code`, `request_id`, `is_not_found`, `is_unauthorized`,
+  `is_forbidden`, `is_conflict` and `is_throttled`.
+- **`tracing` feature** (off by default): the transport logs each request (method, host, path,
+  status, attempt, elapsed time), retries and failures with the service request id. Query
+  strings and tokens are never logged.
+
 ## [0.0.1-beta6] - 2026-11-02
 
 ### Changed

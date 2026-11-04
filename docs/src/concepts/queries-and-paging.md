@@ -4,14 +4,14 @@
 
 Collection handles accept the OData options both APIs understand:
 
-| Method          | OData     | Purpose                                      |
-| --------------- | --------- | -------------------------------------------- |
-| `select([..])`  | `$select` | Return only these properties                 |
-| `filter("..")`  | `$filter` | Server-side filtering                        |
-| `expand("..")`  | `$expand` | Include related entities (e.g. `fields`)     |
-| `order_by("..")`| `$orderby`| Sort                                         |
-| `top(n)`        | `$top`    | Page size / maximum count                    |
-| `search("..")`  | `$search` | Free-text search where supported             |
+| Method           | OData      | Purpose                                  |
+| ---------------- | ---------- | ---------------------------------------- |
+| `select([..])`   | `$select`  | Return only these properties             |
+| `filter("..")`   | `$filter`  | Server-side filtering                    |
+| `expand("..")`   | `$expand`  | Include related entities (e.g. `fields`) |
+| `order_by("..")` | `$orderby` | Sort                                     |
+| `top(n)`         | `$top`     | Page size / maximum count                |
+| `search("..")`   | `$search`  | Free-text search where supported         |
 
 ```rust
 let open = sp.list_by_title("Tasks")
@@ -23,6 +23,46 @@ let open = sp.list_by_title("Tasks")
     .list()
     .await?;
 ```
+
+## Building filters safely
+
+The `filter!` macro and the `Filter` builder quote and escape values for you:
+
+```rust
+use oxipoint::filter;
+
+let name = "O'Brien";
+let open = sp.list_by_title("Tasks")
+    .items()
+    .filter(filter!(Status == "Open" && (Priority >= 3 || Urgent == true) && Author == (name)))
+    .list()
+    .await?;
+// Status eq 'Open' and (Priority ge 3 or Urgent eq true) and Author eq 'O''Brien'
+```
+
+| Part        | Syntax                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| Column      | a bare identifier (`Status`) or a string literal (`"Author/Title"`)                         |
+| Comparison  | `==` `!=` `>` `>=` `<` `<=` (become `eq` `ne` `gt` `ge` `lt` `le`)                          |
+| Value       | one literal (`"text"`, `3`, `2.5`, `true`) or a parenthesized expression (`(name)`, `(-1)`) |
+| Combination | `&&` (and), `\|\|` (or), parentheses; `&&` binds tighter than `\|\|`, as in Rust            |
+
+Strings are always quoted and escaped. Numbers and booleans are written as is.
+
+The same filter without the macro, using the builder:
+
+```rust
+use oxipoint::filter::Filter;
+
+let f = Filter::eq("Status", "Open")
+    .and(Filter::ge("Priority", 3).or(Filter::eq("Urgent", true)))
+    .and(Filter::eq("Author", name));
+let starts = Filter::starts_with("Title", "Report");
+```
+
+A `Filter` converts into `String`, so it works wherever `filter(..)` is accepted, on both Graph
+and SharePoint handles. Dates and functions other than `startswith` are not modelled; pass those
+as a raw string (for example `datetime'2026-01-01T00:00:00Z'` on SharePoint).
 
 Entity handles accept `select` and `expand` where they make sense (for example
 `pages.by_id(..).expand("canvasLayout")`).

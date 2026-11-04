@@ -1165,7 +1165,7 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "oxipoint"
-version = "0.0.1-beta6"
+version = "0.0.1-beta7"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1181,6 +1181,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
+ "tracing",
  "url",
  "wiremock",
 ]
