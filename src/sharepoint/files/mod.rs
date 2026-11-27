@@ -5,7 +5,10 @@ pub use models::{CheckInKind, FileInfo, FileVersion, FolderEntry, FolderInfo};
 use std::{collections::VecDeque, sync::Arc};
 
 use bytes::Bytes;
-use reqwest::Method;
+use reqwest::{
+    Method,
+    header::{CONTENT_TYPE, HeaderValue},
+};
 use serde_json::{Value, json};
 use tokio::io::AsyncWrite;
 use url::Url;
@@ -35,6 +38,7 @@ fn action_string(doc: &Value, verbose_name: &str) -> Option<String> {
 
 /// A folder identified by server-relative URL.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct FolderRequest {
     inner: Arc<Inner>,
     url: String,
@@ -167,10 +171,10 @@ impl FolderRequest {
             })
         };
         let mut req = RawRequest::new(Method::POST, "/SP.MoveCopyUtil.CopyFolderByPath");
-        req.headers.push((
-            "Content-Type".into(),
-            "application/json;odata=verbose".into(),
-        ));
+        req.headers.append(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json;odata=verbose"),
+        );
         req.body = Body::Json(json!({
             "srcPath": path(&self.url),
             "destPath": path(new_url),
@@ -208,6 +212,7 @@ query_methods!(FolderRequest);
 
 /// A file identified by server-relative URL.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct FileRequest {
     inner: Arc<Inner>,
     url: String,
@@ -593,7 +598,7 @@ mod tests {
             .copy_to("/sites/t/Archive/a.txt", false)
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(500));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
     }
 
     #[tokio::test]
@@ -872,7 +877,7 @@ mod tests {
             .download_to(&mut empty)
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
         assert!(empty.is_empty());
     }
 }

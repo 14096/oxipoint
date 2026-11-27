@@ -1,7 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
-use reqwest::header::{HeaderMap, RETRY_AFTER};
+use reqwest::{
+    StatusCode,
+    header::{HeaderMap, RETRY_AFTER},
+};
 use serde_json::Value;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use url::Url;
@@ -17,7 +20,7 @@ pub struct TransportConfig {
     /// Delay used when a throttled response has no `Retry-After` header.
     pub default_retry_delay: Duration,
     /// Headers added to every request.
-    pub default_headers: Vec<(String, String)>,
+    pub default_headers: HeaderMap,
 }
 
 impl Default for TransportConfig {
@@ -25,7 +28,7 @@ impl Default for TransportConfig {
         Self {
             max_retries: 3,
             default_retry_delay: Duration::from_secs(1),
-            default_headers: Vec::new(),
+            default_headers: HeaderMap::new(),
         }
     }
 }
@@ -97,7 +100,7 @@ impl Transport {
     /// Sends a request, retrying throttled responses, and returns the 2xx response.
     pub async fn send(&self, req: &RawRequest) -> Result<Response> {
         let resp = self.execute(req).await?;
-        let status = resp.status().as_u16();
+        let status = resp.status();
         let headers = resp.headers().clone();
         let body = resp.bytes().await?;
         Ok(Response {
@@ -126,9 +129,9 @@ impl Transport {
                 let token = self.credential.get_token(&self.scope).await?;
                 rb = rb.bearer_auth(token.secret().expose());
             }
-            for (k, v) in self.config.default_headers.iter().chain(req.headers.iter()) {
-                rb = rb.header(k, v);
-            }
+            rb = rb
+                .headers(self.config.default_headers.clone())
+                .headers(req.headers.clone());
             rb = match &req.body {
                 Body::None if matches!(req.method.as_str(), "POST" | "PUT" | "PATCH") => {
                     rb.header(reqwest::header::CONTENT_LENGTH, 0)
@@ -157,10 +160,12 @@ impl Transport {
             let headers = resp.headers().clone();
             let body = resp.bytes().await?;
             let idempotent = matches!(req.method.as_str(), "GET" | "HEAD" | "OPTIONS");
-            let retryable = match status.as_u16() {
-                429 => true,
-                503 => idempotent || headers.contains_key(reqwest::header::RETRY_AFTER),
-                504 => idempotent,
+            let retryable = match status {
+                StatusCode::TOO_MANY_REQUESTS => true,
+                StatusCode::SERVICE_UNAVAILABLE => {
+                    idempotent || headers.contains_key(reqwest::header::RETRY_AFTER)
+                }
+                StatusCode::GATEWAY_TIMEOUT => idempotent,
                 _ => false,
             };
             if retryable && attempt < self.config.max_retries {
@@ -177,7 +182,7 @@ impl Transport {
                 tokio::time::sleep(delay).await;
                 continue;
             }
-            let err = parse_service_error(status.as_u16(), &headers, &body);
+            let err = parse_service_error(status, &headers, &body);
             #[cfg(feature = "tracing")]
             tracing::warn!(
                 status = status.as_u16(),
@@ -198,8 +203,8 @@ pub struct StreamResponse {
 
 impl StreamResponse {
     /// Status code.
-    pub fn status(&self) -> u16 {
-        self.inner.status().as_u16()
+    pub fn status(&self) -> StatusCode {
+        self.inner.status()
     }
 
     /// Response headers.
@@ -236,7 +241,7 @@ fn retry_delay(headers: &HeaderMap, default: Duration) -> Duration {
 }
 
 /// Converts an error response (Graph, SharePoint light or verbose format) to [`Error::Http`].
-pub(crate) fn parse_service_error(status: u16, headers: &HeaderMap, body: &[u8]) -> Error {
+pub(crate) fn parse_service_error(status: StatusCode, headers: &HeaderMap, body: &[u8]) -> Error {
     let request_id = ["request-id", "client-request-id", "sprequestguid"]
         .iter()
         .find_map(|h| headers.get(*h))
@@ -298,7 +303,10 @@ mod tests {
             .send(&RawRequest::new(Method::GET, "/a"))
             .await
             .unwrap();
-        assert_eq!((r.status, r.text()), (200, "hi".to_string()));
+        assert_eq!(
+            (r.status, r.text()),
+            (reqwest::StatusCode::OK, "hi".to_string())
+        );
     }
 
     #[tokio::test]
@@ -340,13 +348,13 @@ mod tests {
         let verbose = br#"{"error":{"code":"-1, Sys","message":{"lang":"en","value":"bad"}}}"#;
         let light = br#"{"odata.error":{"code":"c","message":{"value":"m"}}}"#;
         assert!(
-            matches!(parse_service_error(400, &h, verbose), Error::Http { message, .. } if message == "bad")
+            matches!(parse_service_error(reqwest::StatusCode::BAD_REQUEST, &h, verbose), Error::Http { message, .. } if message == "bad")
         );
         assert!(
-            matches!(parse_service_error(400, &h, light), Error::Http { code: Some(c), .. } if c == "c")
+            matches!(parse_service_error(reqwest::StatusCode::BAD_REQUEST, &h, light), Error::Http { code: Some(c), .. } if c == "c")
         );
         assert!(
-            matches!(parse_service_error(500, &h, b"plain"), Error::Http { message, .. } if message == "plain")
+            matches!(parse_service_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, &h, b"plain"), Error::Http { message, .. } if message == "plain")
         );
     }
 
@@ -366,7 +374,7 @@ mod tests {
             .send(&RawRequest::new(Method::GET, "/r"))
             .await
             .unwrap();
-        assert_eq!(r.status, 200);
+        assert_eq!(r.status, reqwest::StatusCode::OK);
     }
 
     #[tokio::test]
@@ -380,7 +388,7 @@ mod tests {
             .send(&RawRequest::new(Method::GET, "/r"))
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(503));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::SERVICE_UNAVAILABLE));
         assert_eq!(server.received_requests().await.unwrap().len(), 3);
     }
 
@@ -395,7 +403,7 @@ mod tests {
             .send(&RawRequest::new(Method::POST, "/r"))
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(504));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::GATEWAY_TIMEOUT));
         assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
 
@@ -415,7 +423,7 @@ mod tests {
             .send(&RawRequest::new(Method::POST, "/r"))
             .await
             .unwrap();
-        assert_eq!(r.status, 200);
+        assert_eq!(r.status, reqwest::StatusCode::OK);
         assert_eq!(server.received_requests().await.unwrap().len(), 2);
     }
 
@@ -473,7 +481,7 @@ mod tests {
             .send_stream(&RawRequest::new(Method::GET, "/big"))
             .await
             .unwrap();
-        assert_eq!(s.status(), 200);
+        assert_eq!(s.status(), reqwest::StatusCode::OK);
         let first = s.chunk().await.unwrap().unwrap();
         assert!(!first.is_empty());
 
@@ -527,7 +535,7 @@ mod tests {
             .send_stream(&RawRequest::new(Method::GET, "/missing"))
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
     }
 
     #[tokio::test]

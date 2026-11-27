@@ -1,10 +1,14 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use bytes::Bytes;
-use reqwest::Method;
+use reqwest::{Method, StatusCode, header::CONTENT_TYPE};
 use serde::{Serialize, de::Error as _};
 
-use super::{Inner, inner::ACCEPT};
+use super::{
+    Inner,
+    inner::{ACCEPT, REQUEST_DIGEST},
+};
+use crate::http::header_value;
 use crate::{
     Error, Result,
     http::{BatchResult, Body, RawRequest, header_map},
@@ -14,6 +18,7 @@ const CRLF: &str = "\r\n";
 
 /// One sub-request of a [`SharePointBatch`].
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SharePointBatchRequest {
     method: Method,
     path: String,
@@ -58,6 +63,7 @@ enum Group {
 /// Several SharePoint calls sent in one `multipart/mixed` request. Get one from
 /// `SharePointClient::batch`.
 #[derive(Debug)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SharePointBatch {
     inner: Arc<Inner>,
     requests: Vec<SharePointBatchRequest>,
@@ -207,12 +213,12 @@ impl SharePointBatch {
         };
         let batch_id = format!("{:032x}", rand::random::<u128>());
         let mut req = RawRequest::new(Method::POST, "/$batch");
-        req.headers.push((
-            "Content-Type".into(),
-            format!("multipart/mixed; boundary=batch_{batch_id}"),
-        ));
+        req.headers.append(
+            CONTENT_TYPE,
+            header_value(&format!("multipart/mixed; boundary=batch_{batch_id}"))?,
+        );
         if let Some(d) = &digest {
-            req.headers.push(("X-RequestDigest".into(), d.clone()));
+            req.headers.append(REQUEST_DIGEST, header_value(d)?);
         }
         req.body = Body::Bytes(Bytes::from(self.build_body(&batch_id, digest.as_deref())));
         let resp = self.inner.t.send(&req).await?;
@@ -341,7 +347,7 @@ fn parse_http_response(content: &str) -> Result<BatchResult> {
     let status = lines
         .next()
         .and_then(|l| l.split_whitespace().nth(1))
-        .and_then(|s| s.parse::<u16>().ok())
+        .and_then(|s| StatusCode::from_str(s).ok())
         .ok_or_else(|| serde_json::Error::custom("a batch part has no HTTP status line"))?;
     let headers = header_map(lines.filter_map(|l| l.split_once(':')));
     let body = body.trim_end_matches('\n');
@@ -473,7 +479,7 @@ mod tests {
         ))
         .unwrap();
         let r = b.send().await.unwrap();
-        assert_eq!(r[0].status, 201);
+        assert_eq!(r[0].status, reqwest::StatusCode::CREATED);
         let reqs = s.received_requests().await.unwrap();
         let body = String::from_utf8(reqs.last().unwrap().body.clone()).unwrap();
         assert!(body.contains("X-RequestDigest: DIGEST\r\n"));
@@ -502,7 +508,7 @@ mod tests {
         let r = b.send().await.unwrap();
         assert!(r[0].is_success());
         let e = r[1].error().unwrap();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
         assert!(e.to_string().contains("List does not exist"));
     }
 
@@ -591,7 +597,10 @@ mod tests {
         .unwrap();
         let r = b.send().await.unwrap();
         assert_eq!(r.len(), 2);
-        assert!(r.iter().all(|x| x.status == 400));
+        assert!(
+            r.iter()
+                .all(|x| x.status == reqwest::StatusCode::BAD_REQUEST)
+        );
         assert!(r[0].error().unwrap().to_string().contains("second failed"));
     }
 
@@ -642,12 +651,15 @@ mod tests {
         let Part::Single(first) = &parts[0] else {
             panic!()
         };
-        assert_eq!(first.status, 200);
+        assert_eq!(first.status, reqwest::StatusCode::OK);
         assert_eq!(first.headers.get("etag").unwrap(), "\"1\"");
         assert_eq!(first.json::<Value>().unwrap()["a"], "line1\nline2");
         let Part::Single(second) = &parts[1] else {
             panic!()
         };
-        assert_eq!((second.status, second.body.len()), (204, 0));
+        assert_eq!(
+            (second.status, second.body.len()),
+            (reqwest::StatusCode::NO_CONTENT, 0)
+        );
     }
 }

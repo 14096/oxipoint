@@ -1,5 +1,6 @@
 /// Common OData query options (`$select`, `$filter`, ...).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct QueryOptions {
     pairs: Vec<(String, String)>,
 }

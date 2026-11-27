@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// Change-notification subscriptions on one list.
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListSubscriptionsRequest {
     pub(super) t: Arc<Transport>,
     pub(super) resource: String,

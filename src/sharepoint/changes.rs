@@ -74,12 +74,9 @@ pub struct Change {
     #[serde(default, deserialize_with = "content_type_id")]
     pub change_token: String,
     /// Changed item id, for item changes.
-    #[serde(default)]
     pub item_id: Option<i64>,
     /// Id of the list the change belongs to.
-    #[serde(default)]
     pub list_id: Option<String>,
     /// Time of the change (ISO 8601).
-    #[serde(default)]
     pub time: Option<String>,
 }

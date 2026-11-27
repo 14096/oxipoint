@@ -57,7 +57,8 @@ To write one definition that works on both, use [`Fields`](fields.md).
 | ----------------------------------------- | --------- |
 | Read OneDrive or a document library       | Graph     |
 | Upload a file bigger than 250 MB          | Graph (`upload_large`) |
-| Create sharing links or invite people     | Graph     |
+| Create sharing links or invite people     | Graph |
+| Manage Microsoft 365 groups and members   | Graph     |
 | Search across files, items and sites      | Graph     |
 | Get changes since last sync               | Graph `delta` |
 | Query with CAML or on many columns        | SharePoint|

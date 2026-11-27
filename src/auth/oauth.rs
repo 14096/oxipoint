@@ -23,9 +23,7 @@ pub(crate) struct OAuthClient {
 #[derive(Debug, Deserialize)]
 struct RawTokenResponse {
     access_token: String,
-    #[serde(default)]
     expires_in: Option<u64>,
-    #[serde(default)]
     refresh_token: Option<String>,
 }
 

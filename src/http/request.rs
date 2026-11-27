@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use reqwest::Method;
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::{Method, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
 
 use tokio::io::AsyncWrite;
@@ -24,6 +24,7 @@ pub enum Body {
 
 /// A transport-independent description of an HTTP request.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct RawRequest {
     /// HTTP method.
     pub method: Method,
@@ -32,7 +33,7 @@ pub struct RawRequest {
     /// Query string parameters.
     pub query: Vec<(String, String)>,
     /// Extra headers.
-    pub headers: Vec<(String, String)>,
+    pub headers: HeaderMap,
     /// Body.
     pub body: Body,
     /// Send without a bearer token and without host checks (e.g. pre-authorized upload URLs).
@@ -46,7 +47,7 @@ impl RawRequest {
             method,
             target: target.into(),
             query: Vec::new(),
-            headers: Vec::new(),
+            headers: HeaderMap::new(),
             body: Body::None,
             anonymous: false,
         }
@@ -57,7 +58,7 @@ impl RawRequest {
 #[derive(Debug, Clone)]
 pub struct Response {
     /// Status code.
-    pub status: u16,
+    pub status: StatusCode,
     /// Response headers.
     pub headers: HeaderMap,
     /// Raw body.
@@ -76,10 +77,17 @@ impl Response {
     }
 }
 
+/// Parses a header value, mapping failure to [`Error::Config`].
+pub(crate) fn header_value(value: &str) -> Result<HeaderValue> {
+    HeaderValue::from_str(value)
+        .map_err(|e| Error::Config(format!("invalid header value '{value}': {e}")))
+}
+
 /// Fluent builder for calling any endpoint through an authenticated client.
 ///
 /// Obtained from `GraphClient::request` or `SharePointClient::request`.
 #[derive(Debug)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct RequestBuilder {
     transport: Arc<Transport>,
     req: RawRequest,
@@ -109,8 +117,24 @@ impl RequestBuilder {
     }
 
     /// Adds a request header.
-    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.req.headers.push((name.into(), value.into()));
+    ///
+    /// An invalid header name or value is reported when the request is sent.
+    pub fn header(mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        match (
+            HeaderName::from_bytes(name.as_ref().as_bytes()),
+            header_value(value.as_ref()),
+        ) {
+            (Ok(n), Ok(v)) => {
+                self.req.headers.append(n, v);
+            }
+            (Err(e), _) => {
+                self.error = Some(Error::Config(format!(
+                    "invalid header name '{}': {e}",
+                    name.as_ref()
+                )));
+            }
+            (_, Err(e)) => self.error = Some(e),
+        }
         self
     }
 
@@ -226,7 +250,7 @@ mod tests {
             .send_stream()
             .await
             .unwrap();
-        assert_eq!(s.status(), 200);
+        assert_eq!(s.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -246,6 +270,6 @@ mod tests {
             .send_stream()
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(403));
+        assert_eq!(e.status(), Some(StatusCode::FORBIDDEN));
     }
 }

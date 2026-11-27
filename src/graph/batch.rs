@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use bytes::Bytes;
-use reqwest::Method;
+use reqwest::{Method, StatusCode};
 use serde::{Serialize, de::Error as _};
 use serde_json::{Value, json};
 
@@ -15,6 +15,7 @@ pub const MAX_BATCH_REQUESTS: usize = 20;
 
 /// One sub-request of a [`GraphBatch`].
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct GraphBatchRequest {
     method: Method,
     path: String,
@@ -57,6 +58,7 @@ impl GraphBatchRequest {
 
 /// Several Graph calls sent in one HTTP request. Get one from `GraphClient::batch`.
 #[derive(Debug)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct GraphBatch {
     t: Arc<Transport>,
     requests: Vec<Value>,
@@ -155,7 +157,14 @@ impl GraphBatch {
                 .get("id")
                 .and_then(Value::as_str)
                 .ok_or_else(|| serde_json::Error::custom("batch response without an id"))?;
-            let status = r.get("status").and_then(Value::as_u64).unwrap_or(0) as u16;
+            let status = r
+                .get("status")
+                .and_then(Value::as_u64)
+                .and_then(|s| u16::try_from(s).ok())
+                .and_then(|s| StatusCode::from_u16(s).ok())
+                .ok_or_else(|| {
+                    serde_json::Error::custom("batch response without a valid status")
+                })?;
             let headers = r
                 .get("headers")
                 .and_then(Value::as_object)
@@ -285,9 +294,9 @@ mod tests {
         let r = b.send().await.unwrap();
         assert!(r[0].is_success());
         assert_eq!(r[0].json::<Value>().unwrap()["ok"], true);
-        assert_eq!(r[1].status, 404);
+        assert_eq!(r[1].status, reqwest::StatusCode::NOT_FOUND);
         let e = r[1].json::<Value>().unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
         assert!(
             matches!(r[1].error(), Some(Error::Http { code: Some(c), .. }) if c == "itemNotFound")
         );
@@ -305,7 +314,10 @@ mod tests {
             .await;
         let mut b = c.batch();
         b.add(get("/me")).unwrap();
-        assert_eq!(b.send().await.unwrap_err().status(), Some(400));
+        assert_eq!(
+            b.send().await.unwrap_err().status(),
+            Some(reqwest::StatusCode::BAD_REQUEST)
+        );
     }
 
     #[tokio::test]
@@ -326,7 +338,7 @@ mod tests {
         b.add(get("/a")).unwrap();
         b.add(get("/b")).unwrap();
         let r = b.send().await.unwrap();
-        assert_eq!(r[0].status, 429);
+        assert_eq!(r[0].status, reqwest::StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(r[0].retry_after(), Some(Duration::from_secs(5)));
         assert!(r[1].is_success());
     }

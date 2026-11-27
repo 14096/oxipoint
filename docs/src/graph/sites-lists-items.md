@@ -26,6 +26,8 @@ println!("{:?} {:?}", info.display_name, info.web_url);
 let subsites = team.sites().await?;
 let child = team.site_by_path("child").get().await?;
 let followed = graph.followed_sites().await?;
+graph.me().follow_sites(["<site-id>"]).await?;
+let everything = graph.sites().all().await?;        // app-only: every site in the tenant
 let stats = team.analytics().await?;
 ```
 
@@ -63,6 +65,8 @@ team.list(&books.id).delete().await?;
 let tasks = team.list("Tasks");
 let cols = tasks.columns().list().await?;
 let types = tasks.content_types().list().await?;
+let perms = tasks.permissions().list().await?;
+tasks.permissions().create(&serde_json::json!({ "roles": ["read"] })).await?;
 ```
 
 ## Items

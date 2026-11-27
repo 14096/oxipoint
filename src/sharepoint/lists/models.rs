@@ -11,37 +11,26 @@ pub struct ListInfo {
     #[serde(default)]
     pub id: String,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Number of items.
-    #[serde(default)]
     pub item_count: Option<u64>,
     /// Template number (see [`ListTemplate`]).
-    #[serde(default)]
     pub base_template: Option<i32>,
     /// Base type (0 list, 1 library, ...).
-    #[serde(default)]
     pub base_type: Option<i32>,
     /// Whether the list is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created: Option<String>,
     /// Last time an item changed (ISO 8601).
-    #[serde(default)]
     pub last_item_modified_date: Option<String>,
     /// Root folder (returned with `expand("RootFolder")`).
-    #[serde(default)]
     pub root_folder: Option<RootFolder>,
     /// Whether versioning is enabled.
-    #[serde(default)]
     pub enable_versioning: Option<bool>,
     /// Whether content types are enabled.
-    #[serde(default)]
     pub content_types_enabled: Option<bool>,
 }
 
@@ -50,10 +39,8 @@ pub struct ListInfo {
 #[serde(rename_all = "PascalCase")]
 pub struct RootFolder {
     /// Name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Server-relative URL.
-    #[serde(default)]
     pub server_relative_url: Option<String>,
 }
 
@@ -141,19 +128,14 @@ pub struct View {
     #[serde(default)]
     pub id: String,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Server-relative URL.
-    #[serde(default)]
     pub server_relative_url: Option<String>,
     /// Whether this is the default view.
-    #[serde(default)]
     pub default_view: Option<bool>,
     /// Whether the view is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
     /// Rows per page.
-    #[serde(default)]
     pub row_limit: Option<u32>,
 }
 
@@ -165,16 +147,12 @@ pub struct Subscription {
     #[serde(default)]
     pub id: String,
     /// Resource being watched.
-    #[serde(default)]
     pub resource: Option<String>,
     /// Endpoint that receives notifications.
-    #[serde(default)]
     pub notification_url: Option<String>,
     /// Expiry (ISO 8601).
-    #[serde(default)]
     pub expiration_date_time: Option<String>,
     /// Opaque value echoed in notifications.
-    #[serde(default)]
     pub client_state: Option<String>,
 }
 
@@ -208,13 +186,11 @@ pub struct FieldResult {
     #[serde(default)]
     pub field_name: String,
     /// Value after the write, as formatted text.
-    #[serde(default)]
     pub field_value: Option<String>,
     /// Whether the column was rejected.
     #[serde(default)]
     pub has_exception: bool,
     /// Why the column was rejected.
-    #[serde(default)]
     pub error_message: Option<String>,
     /// Id of the created or updated item, when returned.
     #[serde(default, deserialize_with = "flex_opt")]
@@ -289,7 +265,6 @@ pub struct Attachment {
     #[serde(default)]
     pub file_name: String,
     /// Server-relative URL.
-    #[serde(default)]
     pub server_relative_url: Option<String>,
 }
 
@@ -298,16 +273,12 @@ pub struct Attachment {
 #[serde(rename_all = "PascalCase")]
 pub struct ItemVersion {
     /// Version id.
-    #[serde(default)]
     pub version_id: Option<i64>,
     /// Version label such as `2.0`.
-    #[serde(default)]
     pub version_label: Option<String>,
     /// Whether this is the current version.
-    #[serde(default)]
     pub is_current_version: Option<bool>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created: Option<String>,
 }
 

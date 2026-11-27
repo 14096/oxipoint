@@ -15,12 +15,13 @@ let graph = GraphClient::new(cred);
 ```text
 graph
 ├── me()                      ─ the signed-in user          → drive()
-├── users() / user(id)        ─ directory users
-├── sites()                   ─ root(), by_id(), by_path(), search()
+├── users() / user(id)        ─ directory users (manager, direct_reports, member_of, photo)
+├── groups() / group(id)      ─ members(), owners(), member_of(), site(), drive()
+├── sites()                   ─ root(), by_id(), by_path(), search(), all()
 │   └── SiteRequest           ─ lists, list(name), pages(), drive(), drives(),
 │                               columns(), content_types(), permissions(), analytics(),
 │                               sites(), site_by_path()
-│       └── ListRequest       ─ items(), item(id), columns(), content_types(), subscriptions()
+│       └── ListRequest       ─ items(), item(id), columns(), content_types(), permissions(), subscriptions()
 ├── drive(id)                 ─ root(), item(id), path("a/b.txt"), delta()
 ├── shared_item(url)          ─ open a sharing URL
 ├── followed_sites()
@@ -46,8 +47,7 @@ let graph = GraphClient::builder(cred)
 
 Good to know before you plan a feature:
 
-- Graph exposes **neither list views nor list permissions**. Use the
-  [SharePoint client](../sharepoint/lists.md) for those.
+- Graph exposes **no list views**. Use the [SharePoint client](../sharepoint/lists.md) for those.
 - Graph has **no way to update or delete a site**, so the Graph client does not offer it. Use
   `sp.web().update(..)` / `sp.web().delete()` instead.
 - Web features such as navigation, features, regional settings and the recycle bin are

@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.0.1-beta8] - 2026-11-27
+
+### Added
+
+- **Graph groups**: `graph.groups()` / `graph.group(id)` with create, update, delete, members,
+  owners, member-of, and the group's team site and drive. `DirectoryObject` model.
+- **Graph users**: `manager`, `direct_reports`, `member_of`, `photo`, `follow_sites` and
+  `unfollow_sites` on `me()` and `user(id)`.
+- **Graph drive items**: `checkout`, `checkin`, `preview`, `thumbnails`, `follow`, `unfollow`,
+  `restore`, and `DriveRequest::find` (drive search).
+- **Graph lists and sites**: list `permissions()` (list, create) and `sites().all()`.
+
+### Changed
+
+- **Breaking:** HTTP statuses are `reqwest::StatusCode` instead of `u16`
+  (`Error::Http::status`, `Error::status`, `Response::status`, `BatchResult::status`,
+  `StreamResponse::status`).
+- **Breaking:** `RawRequest::headers` and `TransportConfig::default_headers` are
+  `reqwest::header::HeaderMap`. `RequestBuilder::header` now reports an invalid name or value
+  when the request is sent. A header set on a request now replaces a default header of the same
+  name instead of being sent next to it.
+- Builder and handle types (`RequestBuilder`, `QueryOptions`, `Filter`, `Pager`, the batch and
+  search builders and all `*Request` handles) are `#[must_use]`.
+- Dropped redundant `#[serde(default)]` attributes on `Option` model fields.
+- Documentation: the `Error::Http` examples match on `is_forbidden()` / `is_not_found()`, the
+  coverage tables list the new Graph APIs, and the Graph limits note now says only list views are
+  missing (list permissions exist).
+
 ## [0.0.1-beta7] - 2026-11-04
 
 ### Added

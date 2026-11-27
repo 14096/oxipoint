@@ -30,6 +30,7 @@ pub use recycle_bin::{RecycleBinItemRequest, RecycleBinRequest};
 
 /// `/web` — the site itself, or a subweb.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct WebRequest {
     inner: Arc<Inner>,
     base: String,

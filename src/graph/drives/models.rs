@@ -10,13 +10,10 @@ pub struct Drive {
     /// Drive id.
     pub id: String,
     /// Name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Kind such as `documentLibrary`.
-    #[serde(default)]
     pub drive_type: Option<String>,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
 }
 
@@ -27,43 +24,30 @@ pub struct DriveItem {
     /// Item id.
     pub id: String,
     /// File or folder name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Size in bytes.
-    #[serde(default)]
     pub size: Option<u64>,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
     /// Present for folders.
-    #[serde(default)]
     pub folder: Option<Value>,
     /// Present for files.
-    #[serde(default)]
     pub file: Option<Value>,
     /// Where the item lives.
-    #[serde(default)]
     pub parent_reference: Option<ParentReference>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created_date_time: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Who created the item.
-    #[serde(default)]
     pub created_by: Option<IdentitySet>,
     /// Who modified the item last.
-    #[serde(default)]
     pub last_modified_by: Option<IdentitySet>,
     /// Entity tag of the item.
-    #[serde(default)]
     pub e_tag: Option<String>,
     /// Entity tag of the item's content.
-    #[serde(default)]
     pub c_tag: Option<String>,
     /// Present in delta results for deleted items.
-    #[serde(default)]
     pub deleted: Option<Value>,
 }
 
@@ -160,13 +144,10 @@ pub struct DriveItemVersion {
     /// Version id such as `2.0`.
     pub id: String,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Size in bytes.
-    #[serde(default)]
     pub size: Option<u64>,
     /// Who made the version.
-    #[serde(default)]
     pub last_modified_by: Option<IdentitySet>,
 }
 
@@ -177,4 +158,42 @@ pub struct DriveDeltaPage {
     pub items: Vec<DriveItem>,
     /// Token to pass to the next `delta` call to receive only newer changes.
     pub next_token: Option<String>,
+}
+
+/// One rendition of an item thumbnail.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Thumbnail {
+    /// Height in pixels.
+    pub height: Option<u32>,
+    /// Width in pixels.
+    pub width: Option<u32>,
+    /// Image URL.
+    pub url: Option<String>,
+}
+
+/// The thumbnails of an item in several sizes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailSet {
+    /// Thumbnail set id (`0` for the first).
+    pub id: Option<String>,
+    /// Small rendition.
+    pub small: Option<Thumbnail>,
+    /// Medium rendition.
+    pub medium: Option<Thumbnail>,
+    /// Large rendition.
+    pub large: Option<Thumbnail>,
+}
+
+/// A short-lived embeddable preview of an item.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemPreview {
+    /// URL to embed with a GET request.
+    pub get_url: Option<String>,
+    /// URL to embed with a POST request.
+    pub post_url: Option<String>,
+    /// Form parameters to send with `post_url`.
+    pub post_parameters: Option<String>,
 }

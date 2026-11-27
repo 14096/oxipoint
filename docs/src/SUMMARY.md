@@ -27,6 +27,7 @@
 
 - [Overview](graph/overview.md)
 - [Users and me](graph/users.md)
+- [Groups](graph/groups.md)
 - [Sites, lists and items](graph/sites-lists-items.md)
 - [Modern pages](graph/pages.md)
 - [Drives and files](graph/drives.md)

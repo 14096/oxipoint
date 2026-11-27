@@ -93,6 +93,31 @@ let old = report.download_version(&versions[1].id).await?;
 report.restore_version(&versions[1].id).await?;
 ```
 
+## Check-out, preview, thumbnails and follow
+
+```rust
+let doc = drive.path("Policies/handbook.docx");
+
+doc.checkout().await?;
+doc.checkin(Some("Updated chapter 3"), false).await?;   // `true` also publishes
+
+let preview = doc.preview(None, None).await?;            // short-lived embed URLs
+let sets = doc.thumbnails().await?;                      // small / medium / large
+
+doc.follow().await?;
+doc.unfollow().await?;
+doc.restore(None, None).await?;                          // a deleted item
+```
+
+## Searching a drive
+
+```rust
+let hits = drive.find("budget 2026").await?;
+```
+
+`find` calls `/root/search(q='...')`. The plain `search("...")` on a drive handle is the
+OData `$search` option, which is a different thing.
+
 ## Delete
 
 ```rust

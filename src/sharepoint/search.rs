@@ -42,6 +42,7 @@ pub struct SpSearchPage {
 
 /// A SharePoint search request (`/_api/search/query`). Get one from `SharePointClient::search`.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SpSearch {
     inner: Arc<Inner>,
     text: String,
@@ -375,7 +376,7 @@ mod tests {
             .await;
         assert_eq!(
             c.search("bad").send().await.unwrap_err().status(),
-            Some(400)
+            Some(reqwest::StatusCode::BAD_REQUEST)
         );
         assert!(matches!(
             c.search("other").send().await,

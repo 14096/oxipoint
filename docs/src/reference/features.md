@@ -13,7 +13,7 @@ All features except `tracing` are enabled by default.
 | `tracing`          | Request, retry and failure events (off by default) |
 
 ```toml
-oxipoint = { version = "0.0.1-beta7", default-features = false, features = ["sharepoint", "auth-certificate"] }
+oxipoint = { version = "0.0.1-beta8", default-features = false, features = ["sharepoint", "auth-certificate"] }
 ```
 
 ## Examples

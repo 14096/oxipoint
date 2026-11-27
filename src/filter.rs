@@ -66,6 +66,7 @@ enum Kind {
 
 /// A `$filter` expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct Filter {
     text: String,
     kind: Kind,

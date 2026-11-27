@@ -16,13 +16,10 @@ const DEFAULT_PAGE_SIZE: u32 = 25;
 #[serde(rename_all = "camelCase")]
 pub struct SearchHit {
     /// Hit id.
-    #[serde(default)]
     pub hit_id: Option<String>,
     /// Rank, 1 being the best match.
-    #[serde(default)]
     pub rank: Option<u32>,
     /// Text excerpt with the matched terms.
-    #[serde(default)]
     pub summary: Option<String>,
     /// The matching entity (a drive item, list item, site, ...), as returned by the service.
     #[serde(default)]
@@ -52,7 +49,6 @@ pub struct SearchPage {
 struct Container {
     #[serde(default)]
     hits: Vec<SearchHit>,
-    #[serde(default)]
     total: Option<u64>,
     #[serde(default)]
     more_results_available: bool,
@@ -73,6 +69,7 @@ struct ResponseItem {
 
 /// A Graph search request (`/search/query`). Get one from `GraphClient::search`.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct GraphSearch {
     t: Arc<Transport>,
     entity_types: Vec<String>,
@@ -282,7 +279,7 @@ mod tests {
             .mount(&s)
             .await;
         let e = c.search().query("x").send().await.unwrap_err();
-        assert_eq!(e.status(), Some(400));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::BAD_REQUEST));
         assert!(e.to_string().contains("Region is required"));
     }
 

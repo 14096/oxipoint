@@ -11,31 +11,22 @@ pub struct Web {
     #[serde(default)]
     pub id: String,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Absolute URL.
-    #[serde(default)]
     pub url: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Server-relative URL.
-    #[serde(default)]
     pub server_relative_url: Option<String>,
     /// Language (LCID).
-    #[serde(default)]
     pub language: Option<u32>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created: Option<String>,
     /// Last time an item changed (ISO 8601).
-    #[serde(default)]
     pub last_item_modified_date: Option<String>,
     /// Web template name.
-    #[serde(default)]
     pub web_template: Option<String>,
     /// Master page URL.
-    #[serde(default)]
     pub master_url: Option<String>,
 }
 
@@ -85,16 +76,12 @@ pub struct NavigationNode {
     #[serde(default)]
     pub id: i64,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// URL.
-    #[serde(default)]
     pub url: Option<String>,
     /// Whether the URL points outside the site.
-    #[serde(default)]
     pub is_external: Option<bool>,
     /// Whether the node is shown.
-    #[serde(default)]
     pub is_visible: Option<bool>,
 }
 
@@ -106,7 +93,6 @@ pub struct Feature {
     #[serde(default)]
     pub definition_id: String,
     /// Display name (when selected).
-    #[serde(default)]
     pub display_name: Option<String>,
 }
 
@@ -115,10 +101,8 @@ pub struct Feature {
 #[serde(rename_all = "PascalCase")]
 pub struct TimeZone {
     /// Time zone id.
-    #[serde(default)]
     pub id: Option<i32>,
     /// Description such as `(UTC+01:00) Amsterdam, Berlin`.
-    #[serde(default)]
     pub description: Option<String>,
 }
 
@@ -127,16 +111,13 @@ pub struct TimeZone {
 #[serde(rename_all = "PascalCase")]
 pub struct RegionalSettings {
     /// Locale id (LCID).
-    #[serde(default, rename = "LocaleId")]
+    #[serde(rename = "LocaleId")]
     pub locale_id: Option<u32>,
     /// Time zone (when expanded).
-    #[serde(default)]
     pub time_zone: Option<TimeZone>,
     /// First day of the week (0 is Sunday).
-    #[serde(default)]
     pub first_day_of_week: Option<u8>,
     /// Time format (0 is 12 hour, 1 is 24 hour).
-    #[serde(default)]
     pub time_format: Option<u8>,
 }
 
@@ -148,31 +129,23 @@ pub struct RecycleBinItem {
     #[serde(default)]
     pub id: String,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// File or folder name.
-    #[serde(default)]
     pub leaf_name: Option<String>,
     /// Folder the item was deleted from.
-    #[serde(default)]
     pub dir_name: Option<String>,
     /// Size in bytes.
     #[serde(default, deserialize_with = "flex_opt")]
     pub size: Option<String>,
     /// Deletion time (ISO 8601).
-    #[serde(default)]
     pub deleted_date: Option<String>,
     /// Kind of item (1 file, 2 file version, 3 list item, 5 list, 6 folder, 9 attachment).
-    #[serde(default)]
     pub item_type: Option<i32>,
     /// Stage the item is in (1 first stage, 2 second stage).
-    #[serde(default)]
     pub item_state: Option<i32>,
     /// Name of the author.
-    #[serde(default)]
     pub author_name: Option<String>,
     /// Name of the user who deleted the item.
-    #[serde(default)]
     pub deleted_by_name: Option<String>,
 }
 
@@ -184,12 +157,9 @@ pub struct SiteInfo {
     #[serde(default)]
     pub id: String,
     /// Absolute URL.
-    #[serde(default)]
     pub url: Option<String>,
     /// Server-relative URL.
-    #[serde(default)]
     pub server_relative_url: Option<String>,
     /// Usage information (when expanded).
-    #[serde(default)]
     pub usage: Option<Value>,
 }

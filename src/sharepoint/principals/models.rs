@@ -10,19 +10,14 @@ pub struct SpUser {
     #[serde(default)]
     pub id: i64,
     /// Login name.
-    #[serde(default)]
     pub login_name: Option<String>,
     /// Display name.
-    #[serde(default)]
     pub title: Option<String>,
     /// Mail address.
-    #[serde(default)]
     pub email: Option<String>,
     /// Principal type bit mask.
-    #[serde(default)]
     pub principal_type: Option<i32>,
     /// Whether the user is a site collection administrator.
-    #[serde(default)]
     pub is_site_admin: Option<bool>,
 }
 
@@ -34,16 +29,12 @@ pub struct SiteGroup {
     #[serde(default)]
     pub id: i64,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Login name.
-    #[serde(default)]
     pub login_name: Option<String>,
     /// Title of the group's owner.
-    #[serde(default)]
     pub owner_title: Option<String>,
 }
 
@@ -55,16 +46,12 @@ pub struct RoleDefinition {
     #[serde(default)]
     pub id: i64,
     /// Name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Whether the role is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
     /// Permissions granted by the role (returned when expanded or selected).
-    #[serde(default)]
     pub base_permissions: Option<BasePermissions>,
 }
 
@@ -76,7 +63,6 @@ pub struct RoleAssignment {
     #[serde(default)]
     pub principal_id: i64,
     /// The user or group (when expanded).
-    #[serde(default)]
     pub member: Option<SpUser>,
     /// The assigned roles (when expanded).
     #[serde(default)]

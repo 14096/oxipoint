@@ -1,5 +1,7 @@
 //! Error and result types shared by the whole crate.
 
+use reqwest::StatusCode;
+
 /// Convenient alias for `Result<T, Error>`.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -25,10 +27,10 @@ pub enum Error {
     #[error("serialization error: {0}")]
     Deserialize(#[from] serde_json::Error),
     /// The service answered with a non-success status.
-    #[error("HTTP {status}{}: {message}", code.as_deref().map(|c| format!(" ({c})")).unwrap_or_default())]
+    #[error("HTTP {}{}: {message}", status.as_u16(), code.as_deref().map(|c| format!(" ({c})")).unwrap_or_default())]
     Http {
         /// HTTP status code.
-        status: u16,
+        status: StatusCode,
         /// Service specific error code, if present.
         code: Option<String>,
         /// Service error message, or the raw body when unparsable.
@@ -50,7 +52,7 @@ impl Error {
     }
 
     /// Returns the HTTP status for [`Error::Http`] errors.
-    pub fn status(&self) -> Option<u16> {
+    pub fn status(&self) -> Option<StatusCode> {
         match self {
             Error::Http { status, .. } => Some(*status),
             _ => None,
@@ -75,28 +77,34 @@ impl Error {
 
     /// Whether the service answered `404 Not Found`.
     pub fn is_not_found(&self) -> bool {
-        self.status() == Some(404)
+        self.status() == Some(StatusCode::NOT_FOUND)
     }
 
     /// Whether the service answered `401 Unauthorized`, or token acquisition failed.
     pub fn is_unauthorized(&self) -> bool {
-        matches!(self, Error::Auth { .. }) || self.status() == Some(401)
+        matches!(self, Error::Auth { .. }) || self.status() == Some(StatusCode::UNAUTHORIZED)
     }
 
     /// Whether the service answered `403 Forbidden`.
     pub fn is_forbidden(&self) -> bool {
-        self.status() == Some(403)
+        self.status() == Some(StatusCode::FORBIDDEN)
     }
 
     /// Whether the service answered `409 Conflict` or `412 Precondition Failed`.
     pub fn is_conflict(&self) -> bool {
-        matches!(self.status(), Some(409 | 412))
+        matches!(
+            self.status(),
+            Some(StatusCode::CONFLICT | StatusCode::PRECONDITION_FAILED)
+        )
     }
 
     /// Whether the request was throttled (`429`), or the service was unavailable (`503`) after
     /// the SDK ran out of retries.
     pub fn is_throttled(&self) -> bool {
-        matches!(self.status(), Some(429 | 503))
+        matches!(
+            self.status(),
+            Some(StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE)
+        )
     }
 }
 
@@ -109,20 +117,20 @@ mod tests {
         let e = Error::auth(Some("invalid_grant"), "bad");
         assert_eq!(e.to_string(), "authentication failed (invalid_grant): bad");
         let e = Error::Http {
-            status: 404,
+            status: StatusCode::NOT_FOUND,
             code: None,
             message: "nope".into(),
             request_id: None,
         };
         assert_eq!(e.to_string(), "HTTP 404: nope");
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(StatusCode::NOT_FOUND));
         assert!(e.is_not_found() && !e.is_throttled());
     }
 
     #[test]
     fn classifiers_and_accessors() {
-        let http = |status| Error::Http {
-            status,
+        let http = |status: u16| Error::Http {
+            status: StatusCode::from_u16(status).unwrap(),
             code: Some("c".into()),
             message: String::new(),
             request_id: Some("r".into()),

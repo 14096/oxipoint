@@ -349,7 +349,7 @@ mod tests {
             .create_link(&LinkOptions::new(LinkType::View).scope(LinkScope::Anonymous))
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(403));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::FORBIDDEN));
     }
 
     #[tokio::test]
@@ -466,6 +466,6 @@ mod tests {
             .get()
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
     }
 }

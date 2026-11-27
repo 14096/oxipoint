@@ -10,25 +10,18 @@ pub struct List {
     /// List id.
     pub id: String,
     /// Internal name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Display name.
-    #[serde(default)]
     pub display_name: Option<String>,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created_date_time: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Template and flags of the list.
-    #[serde(default)]
     pub list: Option<ListFacet>,
 }
 
@@ -37,13 +30,10 @@ pub struct List {
 #[serde(rename_all = "camelCase")]
 pub struct ListFacet {
     /// Template such as `genericList` or `documentLibrary`.
-    #[serde(default)]
     pub template: Option<String>,
     /// Whether the list is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
     /// Whether content types are enabled.
-    #[serde(default)]
     pub content_types_enabled: Option<bool>,
 }
 
@@ -54,10 +44,8 @@ pub struct ItemVersion {
     /// Version id such as `2.0`.
     pub id: String,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Column values of that version.
-    #[serde(default)]
     pub fields: Option<Map<String, Value>>,
 }
 
@@ -68,19 +56,14 @@ pub struct Subscription {
     /// Subscription id.
     pub id: String,
     /// Watched resource such as `sites/{id}/lists/{id}`.
-    #[serde(default)]
     pub resource: Option<String>,
     /// Change types, such as `updated`.
-    #[serde(default)]
     pub change_type: Option<String>,
     /// Endpoint that receives notifications.
-    #[serde(default)]
     pub notification_url: Option<String>,
     /// Expiry (ISO 8601).
-    #[serde(default)]
     pub expiration_date_time: Option<String>,
     /// Opaque value echoed in notifications.
-    #[serde(default)]
     pub client_state: Option<String>,
 }
 
@@ -125,31 +108,22 @@ pub struct ListItem {
     /// Item id.
     pub id: String,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
     /// Column values (present when `$expand=fields` is used or after create).
-    #[serde(default)]
     pub fields: Option<Map<String, Value>>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created_date_time: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Who created the item.
-    #[serde(default)]
     pub created_by: Option<IdentitySet>,
     /// Who last modified the item.
-    #[serde(default)]
     pub last_modified_by: Option<IdentitySet>,
     /// The item's content type.
-    #[serde(default)]
     pub content_type: Option<ContentType>,
     /// The list the item lives in.
-    #[serde(default)]
     pub parent_reference: Option<ParentReference>,
     /// ETag, usable with `update_if_match`.
-    #[serde(default)]
     pub e_tag: Option<String>,
 }
 
@@ -158,10 +132,8 @@ pub struct ListItem {
 #[serde(rename_all = "camelCase")]
 pub struct ItemAnalytics {
     /// Statistics since creation.
-    #[serde(default)]
     pub all_time: Option<Analytics>,
     /// Statistics of the last seven days.
-    #[serde(default)]
     pub last_seven_days: Option<Analytics>,
 }
 
@@ -170,16 +142,12 @@ pub struct ItemAnalytics {
 #[serde(rename_all = "camelCase")]
 pub struct ItemActivity {
     /// Activity id.
-    #[serde(default)]
     pub id: Option<String>,
     /// What happened (`comment`, `edit`, `share`, ...), as returned.
-    #[serde(default)]
     pub action: Option<Value>,
     /// Who did it.
-    #[serde(default)]
     pub actor: Option<IdentitySet>,
     /// When it happened, as returned.
-    #[serde(default)]
     pub times: Option<Value>,
 }
 

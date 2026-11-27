@@ -1,9 +1,12 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use reqwest::header::{HeaderMap, RETRY_AFTER};
 #[cfg(any(feature = "graph", feature = "sharepoint"))]
 use reqwest::header::{HeaderName, HeaderValue};
+use reqwest::{
+    StatusCode,
+    header::{HeaderMap, RETRY_AFTER},
+};
 use serde::de::DeserializeOwned;
 
 use super::transport::parse_service_error;
@@ -16,7 +19,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct BatchResult {
     /// HTTP status of the sub-request.
-    pub status: u16,
+    pub status: StatusCode,
     /// Response headers of the sub-request.
     pub headers: HeaderMap,
     /// Raw response body.
@@ -25,7 +28,7 @@ pub struct BatchResult {
 
 impl BatchResult {
     #[cfg(any(feature = "graph", feature = "sharepoint"))]
-    pub(crate) fn new(status: u16, headers: HeaderMap, body: Bytes) -> Self {
+    pub(crate) fn new(status: StatusCode, headers: HeaderMap, body: Bytes) -> Self {
         Self {
             status,
             headers,
@@ -35,7 +38,7 @@ impl BatchResult {
 
     /// Whether the status is 2xx.
     pub fn is_success(&self) -> bool {
-        (200..300).contains(&self.status)
+        self.status.is_success()
     }
 
     /// The service error for a failed sub-request, or `None` when it succeeded.
@@ -90,17 +93,21 @@ mod tests {
 
     #[test]
     fn success_reads_json_and_failure_is_an_error() {
-        let ok = BatchResult::new(200, HeaderMap::new(), Bytes::from(r#"{"a":1}"#));
+        let ok = BatchResult::new(
+            reqwest::StatusCode::OK,
+            HeaderMap::new(),
+            Bytes::from(r#"{"a":1}"#),
+        );
         assert!(ok.is_success() && ok.error().is_none());
         assert_eq!(ok.json::<serde_json::Value>().unwrap()["a"], 1);
 
         let bad = BatchResult::new(
-            404,
+            reqwest::StatusCode::NOT_FOUND,
             HeaderMap::new(),
             Bytes::from(r#"{"error":{"code":"itemNotFound","message":"gone"}}"#),
         );
         let e = bad.json::<serde_json::Value>().unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(StatusCode::NOT_FOUND));
         assert!(
             matches!(bad.error(), Some(Error::Http { code: Some(c), .. }) if c == "itemNotFound")
         );
@@ -110,11 +117,16 @@ mod tests {
     fn retry_after_in_seconds() {
         let h = header_map([("Retry-After", "7")]);
         assert_eq!(
-            BatchResult::new(429, h, Bytes::new()).retry_after(),
+            BatchResult::new(reqwest::StatusCode::TOO_MANY_REQUESTS, h, Bytes::new()).retry_after(),
             Some(Duration::from_secs(7))
         );
         assert_eq!(
-            BatchResult::new(429, HeaderMap::new(), Bytes::new()).retry_after(),
+            BatchResult::new(
+                reqwest::StatusCode::TOO_MANY_REQUESTS,
+                HeaderMap::new(),
+                Bytes::new()
+            )
+            .retry_after(),
             None
         );
     }

@@ -5,16 +5,6 @@
 
 A fluent, type-safe Rust SDK for **SharePoint REST** and **Microsoft Graph**.
 
-- Four sign-in methods: username/password, certificate, interactive browser, device code.
-- Typed, chainable APIs for the main entities: sites and webs (navigation, users, groups,
-  permissions, features, recycle bin), lists (fields, views, content types, webhooks), items
-  (typed column values, validated writes, likes, comments, delta and change tracking), modern
-  pages (Graph and SharePoint REST), files and folders (copy, move, versions, streaming), search,
-  sharing links, batching and users.
-- Typed column values (`oxipoint::fields`) that serialize for either SharePoint or Graph.
-- A generic request builder for everything else, with the same authentication, retry and error handling.
-- Async (tokio), rustls TLS, modular via cargo features, unit-tested against mocked servers.
-
 ```rust
 use oxipoint::{auth::DeviceCodeCredential, graph::GraphClient};
 
@@ -231,15 +221,26 @@ pages.by_id(&page.id).publish().await?;
 let parts = pages.by_id(&page.id).web_parts().list().await?;
 pages.by_id(&page.id).delete().await?;
 
+// Groups: members, owners, the group's team site
+let team = graph.group("<group-id>");
+let members = team.members().list().await?;
+team.members().add("<user-id>").await?;
+let team_site = team.site().get().await?;
+
 // Files (document libraries and OneDrive)
 let drive = site.drive();                     // or graph.me().drive(), graph.drive("<id>")
 let children = drive.root().children().await?;
 drive.path("Reports/q1.xlsx").upload(std::fs::read("q1.xlsx")?).await?; // > 4 MiB uses an upload session
 let bytes = drive.path("Reports/q1.xlsx").download().await?;
+let doc = drive.path("Reports/q1.xlsx");
+doc.checkout().await?;
+doc.checkin(Some("Updated figures"), false).await?;       // check-out/in, then preview(), thumbnails(), follow()
+let hits = drive.find("budget").await?;                    // search within a drive
 ```
 
-Graph v1.0 exposes neither list views nor list permissions; use the SharePoint client
-(`sp.list_by_title("Tasks").views()` / `.permissions()`) for those.
+Graph v1.0 exposes no list views; use the SharePoint client
+(`sp.list_by_title("Tasks").views()`) for those. List permissions are available on both
+(`site.list("Tasks").permissions()`).
 
 Graph has no way to update or delete a site, so the Graph client does not offer it. Use the
 SharePoint client (`sp.web().update(..)`, `sp.web().delete()`) for that and for other web features
@@ -502,17 +503,18 @@ Notes:
 
 ## What is covered
 
-| Entity            | SharePoint REST (`sp`)                                                                                                                        | Microsoft Graph (`graph`)                                                                                      |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin                               | read, subsites, columns, content types, permissions, analytics, followed sites (no update or delete)           |
-| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                                                          | create, update, delete, columns, content types, subscriptions (no views or permissions)                        |
-| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments                                        | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter               |
-| Modern pages      | list, read (canvas content), create, update, publish, delete                                                                                  | list, read (canvas layout), create, update, publish, delete, web parts                                         |
-| Files and folders | read, upload, download (also streamed), folders, copy, move, rename, recursive listing, check-out and check-in, publish and approve, versions | drives, upload (resumable), download (also streamed), create folder, rename, move, copy, versions, drive delta |
-| Sharing           | not covered (use the generic builder or Graph)                                                                                                | sharing links, invitations, item permissions, open a sharing URL                                               |
-| Search            | query with select, sort, refiners and paging                                                                                                  | query over drive items, list items and sites, with paging                                                      |
-| Batching          | `$batch` with changesets                                                                                                                      | `$batch` (20 calls, dependencies)                                                                              |
-| Users             | current user, site users, groups, ensure user                                                                                                 | me, users                                                                                                      |
+| Entity            | SharePoint REST (`sp`)                                                                                                                        | Microsoft Graph (`graph`)                                                                                                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Web / site        | read, update, delete, subwebs, navigation, users, groups, permissions, features, regional settings, recycle bin                               | read, subsites, columns, content types, permissions, analytics, followed sites, all sites (no update or delete)                                                                      |
+| Lists             | create, update, delete, recycle, fields, views, content types, permissions, webhooks                                                          | create, update, delete, columns, content types, permissions, subscriptions (no views)                                                                                                |
+| Items             | CRUD, CAML, count, changes, attachments, versions, validated writes, formatted values, likes, comments                                        | CRUD, delta, versions, metadata, drive item, analytics, activities, etag guard, unindexed filter                                                                                     |
+| Modern pages      | list, read (canvas content), create, update, publish, delete                                                                                  | list, read (canvas layout), create, update, publish, delete, web parts                                                                                                               |
+| Files and folders | read, upload, download (also streamed), folders, copy, move, rename, recursive listing, check-out and check-in, publish and approve, versions | drives, upload (resumable), download (also streamed), create folder, rename, move, copy, versions, drive delta, check-out and check-in, preview, thumbnails, follow, restore, search |
+| Sharing           | not covered (use the generic builder or Graph)                                                                                                | sharing links, invitations, item permissions, open a sharing URL                                                                                                                     |
+| Search            | query with select, sort, refiners and paging                                                                                                  | query over drive items, list items and sites, with paging                                                                                                                            |
+| Batching          | `$batch` with changesets                                                                                                                      | `$batch` (20 calls, dependencies)                                                                                                                                                    |
+| Users             | current user, site users, groups, ensure user                                                                                                 | me, users, manager, direct reports, memberships, photo                                                                                                                               |
+| Groups            | site groups (see Web)                                                                                                                         | list, create, update, delete, members, owners, member of, team site and drive                                                                                                        |
 
 Anything else is reachable with the generic request builder below.
 
@@ -548,8 +550,8 @@ graph.request(Method::POST, "/me/sendMail")
 
 // Any paged collection
 #[derive(serde::Deserialize)]
-struct Group { id: String }
-let groups: Vec<Group> = graph.request(Method::GET, "/groups").pager()?.collect_all().await?;
+struct Team { id: String }
+let teams: Vec<Team> = graph.request(Method::GET, "/teams").pager()?.collect_all().await?;
 
 // SharePoint
 let user: serde_json::Value = sp.request(Method::GET, "/web/currentuser").send_json().await?;
@@ -574,7 +576,7 @@ All fallible calls return `oxipoint::Result<T>`. `oxipoint::Error` is `#[non_exh
 ```rust
 match graph.me().get().await {
     Ok(me) => println!("{:?}", me.display_name),
-    Err(oxipoint::Error::Http { status: 403, code, .. }) => eprintln!("missing permission: {code:?}"),
+    Err(e) if e.is_forbidden() => eprintln!("missing permission: {:?}", e.code()),
     Err(e) => eprintln!("failed: {e}"),
 }
 ```

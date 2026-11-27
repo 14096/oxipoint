@@ -10,15 +10,11 @@ pub struct ContentType {
     #[serde(default, deserialize_with = "content_type_id")]
     pub id: String,
     /// Name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Group.
-    #[serde(default)]
     pub group: Option<String>,
     /// Whether the content type is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
 }

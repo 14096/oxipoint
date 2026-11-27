@@ -5,17 +5,22 @@ use std::{
     time::{Duration, Instant},
 };
 
-use reqwest::Method;
+use reqwest::{
+    Method,
+    header::{HeaderName, IF_MATCH},
+};
 use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
 use crate::{
     Result,
-    http::{Body, QueryOptions, RawRequest, Response, Transport, encode_path},
+    http::{Body, QueryOptions, RawRequest, Response, Transport, encode_path, header_value},
 };
 
 pub(crate) const ACCEPT: &str = "application/json;odata=nometadata";
+pub(crate) const REQUEST_DIGEST: HeaderName = HeaderName::from_static("x-requestdigest");
+pub(crate) const HTTP_METHOD: HeaderName = HeaderName::from_static("x-http-method");
 
 /// State shared by all handles of one client.
 #[derive(Debug)]
@@ -28,7 +33,6 @@ pub(crate) struct Inner {
 #[serde(rename_all = "PascalCase")]
 struct ContextInfo {
     form_digest_value: String,
-    #[serde(default)]
     form_digest_timeout_seconds: Option<u64>,
 }
 
@@ -64,7 +68,7 @@ impl Inner {
     /// Sends a write request carrying the form digest.
     pub(crate) async fn write(&self, mut req: RawRequest) -> Result<Response> {
         let digest = self.digest().await?;
-        req.headers.push(("X-RequestDigest".into(), digest));
+        req.headers.append(REQUEST_DIGEST, header_value(&digest)?);
         self.t.send(&req).await
     }
 
@@ -82,8 +86,8 @@ impl Inner {
         etag: &str,
     ) -> Result<Response> {
         let mut req = RawRequest::new(Method::POST, path);
-        req.headers.push(("X-HTTP-Method".into(), verb.into()));
-        req.headers.push(("IF-MATCH".into(), etag.into()));
+        req.headers.append(HTTP_METHOD, header_value(verb)?);
+        req.headers.append(IF_MATCH, header_value(etag)?);
         req.body = body;
         self.write(req).await
     }

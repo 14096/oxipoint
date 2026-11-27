@@ -12,6 +12,7 @@ use crate::{
 
 /// `/web/navigation` — the top navigation bar and quick launch.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct NavigationRequest {
     inner: Arc<Inner>,
     base: String,

@@ -16,6 +16,7 @@ macro_rules! collection {
     ($(#[$m:meta])* $name:ident => $item:ty) => {
         $(#[$m])*
         #[derive(Debug, Clone)]
+        #[must_use = "builders do nothing until a request is sent"]
         pub struct $name {
             inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
             base: String,
@@ -52,6 +53,7 @@ macro_rules! entity {
     ($(#[$m:meta])* $name:ident => $item:ty) => {
         $(#[$m])*
         #[derive(Debug, Clone)]
+        #[must_use = "builders do nothing until a request is sent"]
         pub struct $name {
             inner: ::std::sync::Arc<$crate::sharepoint::Inner>,
             base: String,
@@ -95,7 +97,10 @@ mod web;
 
 use std::sync::Arc;
 
-use reqwest::Method;
+use reqwest::{
+    Method,
+    header::{ACCEPT as ACCEPT_HEADER, HeaderValue},
+};
 
 use tokio::sync::Mutex;
 use url::Url;
@@ -201,7 +206,7 @@ impl SharePointClient {
         let origin = url.origin().ascii_serialization();
         config
             .default_headers
-            .push(("Accept".into(), ACCEPT.into()));
+            .insert(ACCEPT_HEADER, HeaderValue::from_static(ACCEPT));
         let base = format!("{}/_api", site_url.trim_end_matches('/'));
         let t = Transport::new(
             Arc::new(CachedCredential::new(credential)),

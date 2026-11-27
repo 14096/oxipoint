@@ -3,6 +3,7 @@ macro_rules! collection {
     ($(#[$m:meta])* $name:ident => $item:ty) => {
         $(#[$m])*
         #[derive(Debug, Clone)]
+        #[must_use = "builders do nothing until a request is sent"]
         pub struct $name {
             t: ::std::sync::Arc<$crate::http::Transport>,
             base: String,
@@ -51,6 +52,7 @@ macro_rules! entity {
     ($(#[$m:meta])* $name:ident => $item:ty) => {
         $(#[$m])*
         #[derive(Debug, Clone)]
+        #[must_use = "builders do nothing until a request is sent"]
         pub struct $name {
             t: ::std::sync::Arc<$crate::http::Transport>,
             base: String,

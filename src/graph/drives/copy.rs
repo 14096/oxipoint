@@ -54,13 +54,9 @@ pub struct CopyProgress {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MonitorDoc {
-    #[serde(default)]
     status: Option<String>,
-    #[serde(default)]
     percentage_complete: Option<f64>,
-    #[serde(default)]
     resource_id: Option<String>,
-    #[serde(default)]
     error: Option<Value>,
 }
 
@@ -118,7 +114,7 @@ impl CopyOperation {
                         .unwrap_or("the copy failed")
                         .to_owned();
                     return Err(Error::Http {
-                        status: 500,
+                        status: reqwest::StatusCode::INTERNAL_SERVER_ERROR,
                         code: Some("copyFailed".into()),
                         message,
                         request_id: None,

@@ -23,6 +23,7 @@ use crate::{
 
 /// `/sites` — site lookup and search.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SitesRequest {
     t: Arc<Transport>,
 }
@@ -48,6 +49,14 @@ impl SitesRequest {
         SiteRequest::new(self.t.clone(), format!("/sites/{host}:/{}", encode_path(p)))
     }
 
+    /// Every site in the tenant across geographies (`/sites/getAllSites`, application
+    /// permissions only).
+    pub async fn all(&self) -> Result<Vec<Site>> {
+        pager(&self.t, "/sites/getAllSites", &QueryOptions::new())
+            .collect_all()
+            .await
+    }
+
     /// Searches sites by keyword.
     pub async fn search(&self, text: &str) -> Result<Vec<Site>> {
         let q = QueryOptions::new();
@@ -59,6 +68,7 @@ impl SitesRequest {
 
 /// One site.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SiteRequest {
     t: Arc<Transport>,
     base: String,
@@ -66,7 +76,7 @@ pub struct SiteRequest {
 }
 
 impl SiteRequest {
-    fn new(t: Arc<Transport>, base: String) -> Self {
+    pub(crate) fn new(t: Arc<Transport>, base: String) -> Self {
         Self {
             t,
             base,

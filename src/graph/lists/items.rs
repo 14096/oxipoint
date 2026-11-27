@@ -1,9 +1,13 @@
+use crate::http::header_value;
 use crate::{
     Result,
     graph::*,
     http::{Body, Pager, QueryOptions, RawRequest, Transport, encode_path, query::query_methods},
 };
-use reqwest::Method;
+use reqwest::{
+    Method,
+    header::{HeaderName, HeaderValue, IF_MATCH},
+};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
@@ -11,6 +15,7 @@ use url::Url;
 
 /// A list's items collection.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListItemsRequest {
     pub(super) t: Arc<Transport>,
     pub(super) base: String,
@@ -18,14 +23,16 @@ pub struct ListItemsRequest {
     pub(super) unindexed: bool,
 }
 
+const PREFER: HeaderName = HeaderName::from_static("prefer");
+
 impl ListItemsRequest {
     fn request(&self, path: &str) -> RawRequest {
         let mut req = request_with(path, &self.query);
         if self.unindexed {
-            req.headers.push((
-                "Prefer".into(),
-                "HonorNonIndexedQueriesWarningMayFailRandomly".into(),
-            ));
+            req.headers.append(
+                PREFER,
+                HeaderValue::from_static("HonorNonIndexedQueriesWarningMayFailRandomly"),
+            );
         }
         req
     }
@@ -90,6 +97,7 @@ query_methods!(ListItemsRequest);
 
 /// One list item.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListItemRequest {
     pub(super) t: Arc<Transport>,
     pub(super) base: String,
@@ -117,7 +125,7 @@ impl ListItemRequest {
         etag: &str,
     ) -> Result<Map<String, Value>> {
         let mut req = RawRequest::new(Method::PATCH, format!("{}/fields", self.base));
-        req.headers.push(("If-Match".into(), etag.to_owned()));
+        req.headers.append(IF_MATCH, header_value(etag)?);
         req.body = Body::Json(serde_json::to_value(fields)?);
         self.t.send(&req).await?.json()
     }

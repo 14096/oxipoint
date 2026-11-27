@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
+use crate::http::header_value;
 use crate::{
     Error, Result,
     fields::Fields,
@@ -18,7 +19,7 @@ use crate::{
     sharepoint::{
         ContentType, FieldResult, FileInfo, FolderInfo, Inner, ItemVersion, ListInfo, ListItem,
         PermissionsRequest, SpUser, ValidateOptions,
-        inner::{get_req, json_body, post, post_action},
+        inner::{REQUEST_DIGEST, get_req, json_body, post, post_action},
     },
 };
 
@@ -51,6 +52,7 @@ fn field_results(doc: Value) -> Result<Vec<FieldResult>> {
 
 /// A list's items collection.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ItemsRequest {
     inner: Arc<Inner>,
     base: String,
@@ -119,7 +121,7 @@ impl ItemsRequest {
     pub async fn caml(&self, view_xml: &str) -> Result<Pager<ListItem>> {
         let digest = self.inner.digest().await?;
         let mut req = RawRequest::new(Method::POST, format!("{}/getitems", self.list_base));
-        req.headers.push(("X-RequestDigest".into(), digest));
+        req.headers.append(REQUEST_DIGEST, header_value(&digest)?);
         req.body = Body::Json(json!({
             "query": {"__metadata": {"type": "SP.CamlQuery"}, "ViewXml": view_xml}
         }));
@@ -149,6 +151,7 @@ query_methods!(ItemsRequest);
 
 /// One list item.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ItemRequest {
     inner: Arc<Inner>,
     base: String,
@@ -395,7 +398,9 @@ mod tests {
             .mount(&s)
             .await;
         let e = c.list_by_title("T").item(9).delete().await.unwrap_err();
-        assert!(matches!(e, Error::Http { status: 404, ref message, .. } if message == "missing"));
+        assert!(
+            matches!(e, Error::Http { status: reqwest::StatusCode::NOT_FOUND, ref message, .. } if message == "missing")
+        );
     }
 
     #[tokio::test]

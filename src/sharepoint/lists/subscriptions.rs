@@ -15,6 +15,7 @@ use crate::{
 
 /// The webhook subscriptions of a list.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct SubscriptionsRequest {
     inner: Arc<Inner>,
     list_base: String,

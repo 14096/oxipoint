@@ -31,6 +31,7 @@ pub use views::{ViewRequest, ViewsRequest};
 
 /// `/web/lists` — all lists.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListsRequest {
     inner: Arc<Inner>,
     query: QueryOptions,
@@ -60,6 +61,7 @@ query_methods!(ListsRequest);
 
 /// One list.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListRequest {
     inner: Arc<Inner>,
     base: String,

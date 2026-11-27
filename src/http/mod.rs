@@ -11,6 +11,8 @@ pub use batch::BatchResult;
 pub(crate) use batch::header_map;
 pub use pager::Pager;
 pub use query::QueryOptions;
+#[cfg(any(feature = "graph", feature = "sharepoint"))]
+pub(crate) use request::header_value;
 pub use request::{Body, RawRequest, RequestBuilder, Response};
 pub use transport::{StreamResponse, Transport, TransportConfig};
 

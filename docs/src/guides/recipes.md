@@ -90,7 +90,7 @@ use oxipoint::sharepoint::{ListTemplate, NewList};
 async fn ensure_list(sp: &oxipoint::sharepoint::SharePointClient, title: &str) -> oxipoint::Result<()> {
     match sp.list_by_title(title).get().await {
         Ok(_) => Ok(()),
-        Err(e) if e.status() == Some(404) => {
+        Err(e) if e.is_not_found() => {
             sp.lists().create(&NewList::new(title, ListTemplate::GenericList)).await?;
             Ok(())
         }
@@ -109,7 +109,7 @@ for _ in 0..3 {
     let etag = item.e_tag.clone().unwrap_or_default();
     match graph_item.update_if_match(&serde_json::json!({ "Title": "x" }), &etag).await {
         Ok(_) => break,
-        Err(e) if e.status() == Some(412) => continue,   // precondition failed: re-read and retry
+        Err(e) if e.status() == Some(reqwest::StatusCode::PRECONDITION_FAILED) => continue,   // precondition failed: re-read and retry
         Err(e) => return Err(e),
     }
 }

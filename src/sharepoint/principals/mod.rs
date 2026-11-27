@@ -63,6 +63,7 @@ collection!(
 ///
 /// Changes here are immediate and affect who can access the web.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct PermissionsRequest {
     inner: Arc<Inner>,
     base: String,

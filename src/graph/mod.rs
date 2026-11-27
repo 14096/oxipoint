@@ -15,6 +15,7 @@ mod macros;
 mod batch;
 mod common;
 mod drives;
+mod groups;
 mod lists;
 #[cfg(test)]
 mod model_tests;
@@ -32,13 +33,15 @@ pub use common::{ActivityCounts, Analytics, Identity, IdentitySet, ParentReferen
 pub use drives::{
     ConflictBehavior, CopyOperation, CopyProgress, CopyStatus, Drive, DriveDeltaPage, DriveItem,
     DriveItemRequest, DriveItemUpdate, DriveItemVersion, DriveRequest, Invite,
-    ItemPermissionRequest, ItemPermissionsRequest, LinkOptions, LinkScope, LinkType,
+    ItemPermissionRequest, ItemPermissionsRequest, ItemPreview, LinkOptions, LinkScope, LinkType,
+    Thumbnail, ThumbnailSet,
 };
+pub use groups::{DirectoryObject, DirectoryObjectsRequest, Group, GroupRequest, GroupsRequest};
 pub use lists::{
     DeltaPage, ItemActivity, ItemAnalytics, ItemVersion, List, ListColumnRequest,
     ListColumnsRequest, ListContentTypeRequest, ListContentTypesRequest, ListFacet, ListItem,
-    ListItemRequest, ListItemsRequest, ListRequest, ListSubscriptionsRequest, ListsRequest,
-    NewSubscription, Subscription,
+    ListItemRequest, ListItemsRequest, ListPermissionsRequest, ListRequest,
+    ListSubscriptionsRequest, ListsRequest, NewSubscription, Subscription,
 };
 pub use search::{GraphSearch, SearchHit, SearchPage};
 pub use sites::{
@@ -108,6 +111,7 @@ pub struct GraphClient {
 
 /// Builder for a [`GraphClient`] with non-default settings.
 #[derive(Debug)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct GraphClientBuilder {
     credential: Arc<dyn TokenCredential>,
     base_url: String,
@@ -173,6 +177,16 @@ impl GraphClient {
     /// A single user by id or user principal name.
     pub fn user(&self, id: &str) -> UserRequest {
         UserRequest::new(self.t.clone(), id)
+    }
+
+    /// The groups collection.
+    pub fn groups(&self) -> GroupsRequest {
+        GroupsRequest::new(self.t.clone(), "/groups".to_owned())
+    }
+
+    /// A single group by object id.
+    pub fn group(&self, id: &str) -> GroupRequest {
+        self.groups().by_id(id)
     }
 
     /// Site lookup and search.

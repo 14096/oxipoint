@@ -8,31 +8,23 @@ pub struct SitePage {
     #[serde(default)]
     pub id: u32,
     /// File name, for example `Home.aspx`.
-    #[serde(default)]
     pub file_name: Option<String>,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Server-relative URL.
-    #[serde(default)]
     pub url: Option<String>,
     /// Layout (`Article`, `Home`, ...).
-    #[serde(default)]
     pub page_layout_type: Option<String>,
     /// Canvas content as JSON text; present when selected (`CanvasContent1`).
-    #[serde(default, rename = "CanvasContent1")]
+    #[serde(rename = "CanvasContent1")]
     pub canvas_content: Option<String>,
     /// Whether the page is a promoted news post (`Article` pages only).
-    #[serde(default)]
     pub promotion_kind: Option<String>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub first_published: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified: Option<String>,
 }
 

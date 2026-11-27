@@ -1,10 +1,12 @@
 mod copy;
 mod models;
+mod operations;
 mod sharing;
 
 pub use copy::{CopyOperation, CopyProgress, CopyStatus};
 pub use models::{
     ConflictBehavior, Drive, DriveDeltaPage, DriveItem, DriveItemUpdate, DriveItemVersion,
+    ItemPreview, Thumbnail, ThumbnailSet,
 };
 pub(crate) use sharing::encode_share_url;
 pub use sharing::{
@@ -14,13 +16,17 @@ pub use sharing::{
 use std::sync::Arc;
 
 use bytes::Bytes;
-use reqwest::{Method, header::CONTENT_TYPE};
+use reqwest::{
+    Method,
+    header::{CONTENT_RANGE, CONTENT_TYPE, HeaderValue},
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::AsyncWrite;
 use url::Url;
 
 use crate::graph::*;
+use crate::http::header_value;
 use crate::{
     Error, Result,
     http::{Body, QueryOptions, RawRequest, Transport, encode_path, query::query_methods},
@@ -33,6 +39,7 @@ const DEFAULT_CHUNK: usize = 320 * 1024 * 10;
 
 /// A drive (document library or OneDrive).
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct DriveRequest {
     t: Arc<Transport>,
     base: String,
@@ -112,6 +119,7 @@ query_methods!(DriveRequest);
 
 /// A file or folder in a drive.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct DriveItemRequest {
     t: Arc<Transport>,
     base: String,
@@ -273,8 +281,10 @@ impl DriveItemRequest {
         let content = content.into();
         if content.len() <= SIMPLE_UPLOAD_LIMIT {
             let mut req = RawRequest::new(Method::PUT, format!("{}/content", self.base));
-            req.headers
-                .push((CONTENT_TYPE.to_string(), "application/octet-stream".into()));
+            req.headers.append(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/octet-stream"),
+            );
             req.body = Body::Bytes(content);
             self.t.send(&req).await?.json()
         } else {
@@ -299,10 +309,15 @@ impl DriveItemRequest {
             let end = (offset + chunk_size).min(total);
             let mut req = RawRequest::new(Method::PUT, session.upload_url.as_str());
             req.anonymous = true;
-            req.headers.push((
-                "Content-Range".into(),
-                format!("bytes {}-{}/{}", offset, end.saturating_sub(1), total),
-            ));
+            req.headers.append(
+                CONTENT_RANGE,
+                header_value(&format!(
+                    "bytes {}-{}/{}",
+                    offset,
+                    end.saturating_sub(1),
+                    total
+                ))?,
+            );
             req.body = Body::Bytes(content.slice(offset..end));
             let resp = self.t.send(&req).await?;
             offset = end;
@@ -512,7 +527,7 @@ mod tests {
             .create_folder("X", None)
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(409));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::CONFLICT));
     }
 
     #[tokio::test]
@@ -761,7 +776,7 @@ mod tests {
             .mount(&s)
             .await;
         let e = c.drive("d").delta(Some("old")).await.unwrap_err();
-        assert_eq!(e.status(), Some(410));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::GONE));
     }
 
     #[tokio::test]
@@ -795,7 +810,7 @@ mod tests {
             .download_to(&mut out)
             .await
             .unwrap_err();
-        assert_eq!(e.status(), Some(404));
+        assert_eq!(e.status(), Some(reqwest::StatusCode::NOT_FOUND));
         assert!(out.is_empty());
     }
 }

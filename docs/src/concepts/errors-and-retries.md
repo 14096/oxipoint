@@ -35,8 +35,8 @@ use oxipoint::Error;
 
 match graph.me().get().await {
     Ok(me) => println!("{:?}", me.display_name),
-    Err(Error::Http { status: 403, code, .. }) => eprintln!("missing permission: {code:?}"),
-    Err(Error::Http { status: 404, .. }) => eprintln!("not found"),
+    Err(e) if e.is_forbidden() => eprintln!("missing permission: {:?}", e.code()),
+    Err(e) if e.is_not_found() => eprintln!("not found"),
     Err(Error::Auth { code, message }) => eprintln!("sign-in failed ({code:?}): {message}"),
     Err(e) => eprintln!("failed: {e}"),
 }
@@ -74,7 +74,7 @@ Query strings, headers and tokens are never logged.
 The SDK only emits events; your application decides where they go by installing a subscriber:
 
 ```toml
-oxipoint = { version = "0.0.1-beta7", features = ["tracing"] }
+oxipoint = { version = "0.0.1-beta8", features = ["tracing"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ```
 

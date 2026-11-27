@@ -2,6 +2,7 @@ mod columns;
 mod content_types;
 mod items;
 mod models;
+mod permissions;
 mod subscriptions;
 
 pub use columns::{ListColumnRequest, ListColumnsRequest};
@@ -11,6 +12,7 @@ pub use models::{
     DeltaPage, ItemActivity, ItemAnalytics, ItemVersion, List, ListFacet, ListItem,
     NewSubscription, Subscription,
 };
+pub use permissions::ListPermissionsRequest;
 pub use subscriptions::ListSubscriptionsRequest;
 
 use std::sync::Arc;
@@ -26,6 +28,7 @@ use crate::{
 
 /// A site's lists.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListsRequest {
     t: Arc<Transport>,
     base: String,
@@ -62,6 +65,7 @@ query_methods!(ListsRequest);
 
 /// One list.
 #[derive(Debug, Clone)]
+#[must_use = "builders do nothing until a request is sent"]
 pub struct ListRequest {
     t: Arc<Transport>,
     base: String,
@@ -119,6 +123,11 @@ impl ListRequest {
     /// The list's columns.
     pub fn columns(&self) -> ListColumnsRequest {
         ListColumnsRequest::new(self.t.clone(), format!("{}/columns", self.base))
+    }
+
+    /// The list's permissions.
+    pub fn permissions(&self) -> ListPermissionsRequest {
+        ListPermissionsRequest::new(self.t.clone(), format!("{}/permissions", self.base))
     }
 
     /// The list's content types.
@@ -220,7 +229,13 @@ mod tests {
             .delete()
             .await
             .unwrap_err();
-        assert!(matches!(e, Error::Http { status: 404, .. }));
+        assert!(matches!(
+            e,
+            Error::Http {
+                status: reqwest::StatusCode::NOT_FOUND,
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
@@ -634,7 +649,13 @@ mod tests {
             .update_if_match(&json!({"Title":"n"}), "\"old\"")
             .await
             .unwrap_err();
-        assert!(matches!(e, Error::Http { status: 412, .. }));
+        assert!(matches!(
+            e,
+            Error::Http {
+                status: reqwest::StatusCode::PRECONDITION_FAILED,
+                ..
+            }
+        ));
     }
 
     #[tokio::test]

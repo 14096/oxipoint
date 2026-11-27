@@ -8,28 +8,20 @@ pub struct Site {
     /// Composite id (`host,siteId,webId`).
     pub id: String,
     /// URL segment name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Display name.
-    #[serde(default)]
     pub display_name: Option<String>,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created_date_time: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Present (as an empty object) on the root site of a site collection.
-    #[serde(default)]
     pub root: Option<Value>,
     /// Site collection information.
-    #[serde(default)]
     pub site_collection: Option<SiteCollection>,
 }
 
@@ -38,13 +30,10 @@ pub struct Site {
 #[serde(rename_all = "camelCase")]
 pub struct SiteCollection {
     /// Host name.
-    #[serde(default)]
     pub hostname: Option<String>,
     /// Data location code.
-    #[serde(default)]
     pub data_location_code: Option<String>,
     /// Present (as an empty object) when the site is a collection root.
-    #[serde(default)]
     pub root: Option<Value>,
 }
 
@@ -55,22 +44,16 @@ pub struct Column {
     /// Column id.
     pub id: String,
     /// Internal name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Display name.
-    #[serde(default)]
     pub display_name: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Column group.
-    #[serde(default)]
     pub column_group: Option<String>,
     /// Whether a value is required.
-    #[serde(default)]
     pub required: Option<bool>,
     /// Whether the column is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
 }
 
@@ -81,19 +64,14 @@ pub struct ContentType {
     /// Content type id such as `0x0101...`.
     pub id: String,
     /// Name.
-    #[serde(default)]
     pub name: Option<String>,
     /// Description.
-    #[serde(default)]
     pub description: Option<String>,
     /// Group.
-    #[serde(default)]
     pub group: Option<String>,
     /// Whether the content type is hidden.
-    #[serde(default)]
     pub hidden: Option<bool>,
     /// Whether the content type ships with SharePoint.
-    #[serde(default)]
     pub is_built_in: Option<bool>,
 }
 
@@ -110,16 +88,13 @@ pub struct Permission {
     #[serde(default, rename = "grantedToIdentitiesV2")]
     pub granted_to_identities: Vec<Value>,
     /// Single identity the permission is granted to.
-    #[serde(default, rename = "grantedToV2")]
+    #[serde(rename = "grantedToV2")]
     pub granted_to: Option<Value>,
     /// Sharing link, when the permission comes from one.
-    #[serde(default)]
     pub link: Option<Value>,
     /// Expiration time (ISO 8601).
-    #[serde(default)]
     pub expiration_date_time: Option<String>,
     /// Whether a sharing link is protected by a password.
-    #[serde(default)]
     pub has_password: Option<bool>,
 }
 
@@ -147,31 +122,23 @@ pub struct SitePage {
     /// Page id.
     pub id: String,
     /// OData type (`#microsoft.graph.sitePage` for site pages).
-    #[serde(default, rename = "@odata.type")]
+    #[serde(rename = "@odata.type")]
     pub odata_type: Option<String>,
     /// File name, for example `Home.aspx`.
-    #[serde(default)]
     pub name: Option<String>,
     /// Title.
-    #[serde(default)]
     pub title: Option<String>,
     /// Browser URL.
-    #[serde(default)]
     pub web_url: Option<String>,
     /// Page layout (`article`, `home`, ...).
-    #[serde(default)]
     pub page_layout: Option<String>,
     /// Publishing state.
-    #[serde(default)]
     pub publishing_state: Option<PublishingState>,
     /// Creation time (ISO 8601).
-    #[serde(default)]
     pub created_date_time: Option<String>,
     /// Last modification time (ISO 8601).
-    #[serde(default)]
     pub last_modified_date_time: Option<String>,
     /// Canvas content; present with `$expand=canvasLayout`.
-    #[serde(default)]
     pub canvas_layout: Option<CanvasLayout>,
 }
 
@@ -180,10 +147,8 @@ pub struct SitePage {
 #[serde(rename_all = "camelCase")]
 pub struct PublishingState {
     /// `draft` or `published`.
-    #[serde(default)]
     pub level: Option<String>,
     /// Version label.
-    #[serde(default)]
     pub version_id: Option<String>,
 }
 
@@ -195,7 +160,6 @@ pub struct CanvasLayout {
     #[serde(default)]
     pub horizontal_sections: Vec<HorizontalSection>,
     /// The vertical section, if any.
-    #[serde(default)]
     pub vertical_section: Option<Value>,
 }
 
@@ -204,10 +168,8 @@ pub struct CanvasLayout {
 #[serde(rename_all = "camelCase")]
 pub struct HorizontalSection {
     /// Section id.
-    #[serde(default)]
     pub id: Option<String>,
     /// Layout (`oneColumn`, `twoColumns`, ...).
-    #[serde(default)]
     pub layout: Option<String>,
     /// Columns of the section.
     #[serde(default)]
@@ -219,10 +181,8 @@ pub struct HorizontalSection {
 #[serde(rename_all = "camelCase")]
 pub struct HorizontalSectionColumn {
     /// Column id.
-    #[serde(default)]
     pub id: Option<String>,
     /// Width in grid units.
-    #[serde(default)]
     pub width: Option<u32>,
     /// Web parts in the column.
     #[serde(default)]
@@ -233,13 +193,12 @@ pub struct HorizontalSectionColumn {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct WebPart {
     /// Web part id.
-    #[serde(default)]
     pub id: Option<String>,
     /// OData type, for example `#microsoft.graph.textWebPart`.
-    #[serde(default, rename = "@odata.type")]
+    #[serde(rename = "@odata.type")]
     pub odata_type: Option<String>,
     /// Inner HTML of a text web part.
-    #[serde(default, rename = "innerHtml")]
+    #[serde(rename = "innerHtml")]
     pub inner_html: Option<String>,
     /// Remaining type-specific properties.
     #[serde(flatten)]
